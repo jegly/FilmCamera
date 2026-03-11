@@ -1,5 +1,6 @@
 package com.photoncam.ui.filmselect
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -29,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -147,16 +150,12 @@ private fun FilmRow(film: FilmStock, isSelected: Boolean, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .background(if (isSelected) film.accentColor.copy(alpha = 0.08f) else Color.Transparent)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Color swatch
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .clip(CircleShape)
-                .background(film.accentColor),
-        )
+        // Film canister icon
+        FilmCanisterIcon(color = film.accentColor)
+
         Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
@@ -189,5 +188,62 @@ private fun FilmRow(film: FilmStock, isSelected: Boolean, onClick: () -> Unit) {
                 fontSize = 10.sp,
             )
         }
+    }
+}
+
+// ── Film canister icon — Canvas-drawn 35mm canister ───────────────────────────
+
+@Composable
+private fun FilmCanisterIcon(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(width = 24.dp, height = 38.dp)) {
+        val w = size.width
+        val h = size.height
+        val capW = w * 0.55f
+        val capH = h * 0.16f
+        val tongueW = capW * 0.35f
+        val tongueH = capH * 0.7f
+        val bodyCorner = CornerRadius(3.dp.toPx())
+
+        // Film tongue (tiny protrusion above cap)
+        drawRoundRect(
+            color = color.copy(alpha = 0.45f),
+            topLeft = Offset((w - tongueW) / 2f, 0f),
+            size = Size(tongueW, tongueH),
+            cornerRadius = CornerRadius(1.5f.dp.toPx()),
+        )
+
+        // Cap (slightly wider, darker)
+        drawRoundRect(
+            color = color.copy(alpha = 0.65f),
+            topLeft = Offset((w - capW) / 2f, tongueH * 0.6f),
+            size = Size(capW, capH),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
+
+        // Body (full width, rounded)
+        val bodyTop = tongueH * 0.6f + capH * 0.7f
+        val bodyH = h - bodyTop
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(0f, bodyTop),
+            size = Size(w, bodyH),
+            cornerRadius = bodyCorner,
+        )
+
+        // Highlight stripe (left side gloss effect)
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.18f),
+            topLeft = Offset(w * 0.12f, bodyTop + bodyH * 0.12f),
+            size = Size(w * 0.14f, bodyH * 0.65f),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
+
+        // Shadow stripe on right
+        drawRoundRect(
+            color = Color.Black.copy(alpha = 0.2f),
+            topLeft = Offset(w * 0.74f, bodyTop + bodyH * 0.08f),
+            size = Size(w * 0.14f, bodyH * 0.7f),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
     }
 }

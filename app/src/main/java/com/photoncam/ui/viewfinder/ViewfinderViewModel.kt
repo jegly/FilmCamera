@@ -1,11 +1,13 @@
 package com.photoncam.ui.viewfinder
 
 import android.net.Uri
+import android.util.Range
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.photoncam.camera.CameraManager
+import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
 import com.photoncam.processing.ImageProcessor
@@ -28,6 +30,11 @@ data class ViewfinderUiState(
     val error: String? = null,
     val showFilmSelector: Boolean = false,
     val rollFinished: Boolean = false,
+    val availableLenses: List<LensInfo> = emptyList(),
+    val selectedLens: LensInfo? = null,
+    val evIndex: Int = 0,
+    val evRange: Range<Int>? = null,
+    val evStep: Double = 1.0,
 )
 
 @HiltViewModel
@@ -40,11 +47,59 @@ class ViewfinderViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ViewfinderUiState())
     val uiState: StateFlow<ViewfinderUiState> = _uiState.asStateFlow()
 
+    @OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
     fun bindCamera(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
         viewModelScope.launch {
-            cameraManager.bindToLifecycle(lifecycleOwner, previewView)
+            // Fetch available lenses only once
+            val lenses = _uiState.value.availableLenses.ifEmpty {
+                runCatching { cameraManager.getAvailableLenses() }.getOrDefault(emptyList())
+                    .also { fetched ->
+                        if (fetched.isNotEmpty()) {
+                            val default = fetched.firstOrNull { it.label == "1×" } ?: fetched.first()
+                            _uiState.update { s ->
+                                s.copy(
+                                    availableLenses = fetched,
+                                    selectedLens = s.selectedLens ?: default,
+                                )
+                            }
+                        }
+                    }
+            }
+
+            val lensToUse = _uiState.value.selectedLens ?: lenses.firstOrNull()
+
+            cameraManager.bindToLifecycle(lifecycleOwner, previewView, lensToUse)
+                .onSuccess { exposureState ->
+                    _uiState.update {
+                        it.copy(
+                            evIndex = exposureState.exposureCompensationIndex,
+                            evRange = exposureState.exposureCompensationRange,
+                            evStep = exposureState.exposureCompensationStep.toDouble(),
+                        )
+                    }
+                }
                 .onFailure { e ->
                     _uiState.update { it.copy(error = "Camera init failed: ${e.message}") }
+                }
+        }
+    }
+
+    fun selectLens(lens: LensInfo) {
+        if (_uiState.value.selectedLens?.id == lens.id) return
+        _uiState.update { it.copy(selectedLens = lens) }
+        // The LaunchedEffect(selectedLens) in ViewfinderScreen will re-call bindCamera
+    }
+
+    fun adjustExposure(delta: Int) {
+        val state = _uiState.value
+        val range = state.evRange ?: return
+        val newIndex = (state.evIndex + delta).coerceIn(range.lower, range.upper)
+        if (newIndex == state.evIndex) return
+        _uiState.update { it.copy(evIndex = newIndex) }
+        viewModelScope.launch {
+            cameraManager.setExposureCompensation(newIndex)
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = "EV adjust failed: ${e.message}") }
                 }
         }
     }
