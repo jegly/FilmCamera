@@ -53,6 +53,7 @@ class CameraManager @Inject constructor(
                 preview,
                 imageCapture,
             )
+            Unit
         }
     }
 
