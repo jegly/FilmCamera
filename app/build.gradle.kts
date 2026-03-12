@@ -43,7 +43,7 @@ android {
     applicationVariants.all {
         outputs.all {
             (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "photoncam-v${defaultConfig.versionName}-alpha0.apk"
+                "photoncam-v${defaultConfig.versionName}-alpha1.apk"
         }
     }
 }

@@ -90,6 +90,22 @@ class ViewfinderViewModel @Inject constructor(
         // The LaunchedEffect(selectedLens) in ViewfinderScreen will re-call bindCamera
     }
 
+    fun selectNextLens() {
+        val lenses = _uiState.value.availableLenses
+        if (lenses.size < 2) return
+        val current = _uiState.value.selectedLens ?: return
+        val idx = lenses.indexOfFirst { it.id == current.id }
+        selectLens(lenses[(idx + 1) % lenses.size])
+    }
+
+    fun selectPrevLens() {
+        val lenses = _uiState.value.availableLenses
+        if (lenses.size < 2) return
+        val current = _uiState.value.selectedLens ?: return
+        val idx = lenses.indexOfFirst { it.id == current.id }
+        selectLens(lenses[(idx - 1 + lenses.size) % lenses.size])
+    }
+
     fun adjustExposure(delta: Int) {
         val state = _uiState.value
         val range = state.evRange ?: return
