@@ -10,7 +10,7 @@ An Android film camera emulator. Select a film stock, shoot through a vintage ra
 - **Grain & light leaks** — procedural per-shot analog artefacts
 - **Date imprint** — configurable 1990s-style timestamp: format, colour, font (LED/7-segment), size, position, glow
 - **Favorites** — star any film stock, filter to favorites in the selector
-- **Persistent roll counter** — cumulative shot count since app install, plus a per-roll frame counter (36 exp.)
+- **Shot counter** — cumulative shot count since app install, displayed on the viewfinder LCD
 - **Lens selector** — ultrawide / main / telephoto / front camera switching via D-pad or tap
 - **VIEW / SHARE** — always available if any PhotonCam photo exists in the gallery
 
@@ -37,7 +37,7 @@ Optionally burn a date stamp into each photo in the style of 1990s disposable ca
 ## Build
 
 ```bash
-./gradlew assembleDebug       # debug APK → app/build/outputs/apk/debug/photoncam-v1.0.0.apk
+./gradlew assembleDebug       # debug APK → app/build/outputs/apk/debug/photoncam-v1.0.1.apk
 ./gradlew installDebug        # install on device / emulator
 ```
 

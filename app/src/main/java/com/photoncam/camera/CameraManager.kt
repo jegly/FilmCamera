@@ -7,7 +7,10 @@ import android.util.Range
 import android.util.Size
 import android.view.OrientationEventListener
 import android.view.Surface
+import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import android.hardware.camera2.CaptureRequest
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExposureState
@@ -289,6 +292,23 @@ class CameraManager @Inject constructor(
     }
 
     // ── Flash ─────────────────────────────────────────────────────────────────
+
+    // ── AE lock (screen flash) ────────────────────────────────────────────────
+    //
+    // Lock auto-exposure before showing the screen flash so the camera does not
+    // stop down in response to the bright white screen.  The pre-flash exposure
+    // (metered for the ambient scene) is preserved for the capture, which gives
+    // the correct exposure once the white screen is illuminating the subject.
+    // Cameras that do not support AE lock silently ignore the request.
+
+    @androidx.camera.camera2.interop.ExperimentalCamera2Interop
+    fun setAeLock(locked: Boolean) {
+        val ctrl = camera?.cameraControl ?: return
+        Camera2CameraControl.from(ctrl).captureRequestOptions =
+            CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, locked)
+                .build()
+    }
 
     fun setFlashEnabled(enabled: Boolean) {
         imageCapture?.flashMode = if (enabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF

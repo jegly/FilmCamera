@@ -36,7 +36,6 @@ import javax.inject.Inject
 
 data class ViewfinderUiState(
     val selectedFilm: FilmStock = FilmCatalog.default,
-    val photosTaken: Int = 0,            // roll counter (0-36), resets on reload
     val totalShotsTaken: Int = 0,        // cumulative lifetime counter
     val isCapturing: Boolean = false,
     val processingCount: Int = 0,
@@ -56,7 +55,6 @@ data class ViewfinderUiState(
     val flashEnabled: Boolean = false,
     val screenFlashActive: Boolean = false,
     val showFilmSelector: Boolean = false,
-    val rollFinished: Boolean = false,
     val availableLenses: List<LensInfo> = emptyList(),
     val selectedLens: LensInfo? = null,
     val evIndex: Int = 0,
@@ -340,17 +338,14 @@ class ViewfinderViewModel @Inject constructor(
         }
     }
 
-    fun reloadRoll() {
-        _uiState.update { it.copy(photosTaken = 0, rollFinished = false) }
-    }
-
     fun clearLastCapture() {
         _uiState.update { it.copy(lastCapturedUri = null) }
     }
 
+    @OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
     fun capture() {
         val state = _uiState.value
-        if (state.isCapturing || state.rollFinished) return
+        if (state.isCapturing) return
 
         val film = state.selectedFilm
         val dateEnabled = state.dateImprintEnabled
@@ -368,21 +363,25 @@ class ViewfinderViewModel @Inject constructor(
             _uiState.update { it.copy(isCapturing = true, error = null) }
 
             if (useScreenFlash) {
+                // Lock AE BEFORE showing the flash so the camera keeps the pre-flash
+                // exposure metered for the ambient scene.  Without this, AE sees the
+                // bright white screen and stops down, producing a dark capture.
+                cameraManager.setAeLock(true)
                 _uiState.update { it.copy(screenFlashActive = true) }
-                delay(120) // let the white overlay render before shutter fires
+                delay(300) // wait for display hardware to reach max brightness
             }
 
             cameraManager.takePicture()
                 .onSuccess { rawFile ->
-                    if (useScreenFlash) _uiState.update { it.copy(screenFlashActive = false) }
-                    val newTaken = _uiState.value.photosTaken + 1
+                    if (useScreenFlash) {
+                        cameraManager.setAeLock(false)
+                        _uiState.update { it.copy(screenFlashActive = false) }
+                    }
                     val newTotal = _uiState.value.totalShotsTaken + 1
                     _uiState.update {
                         it.copy(
                             isCapturing = false,
-                            photosTaken = newTaken,
                             totalShotsTaken = newTotal,
-                            rollFinished = newTaken >= 36,
                             processingCount = it.processingCount + 1,
                         )
                     }
@@ -433,7 +432,10 @@ class ViewfinderViewModel @Inject constructor(
                     }
                 }
                 .onFailure { e ->
-                    if (useScreenFlash) _uiState.update { it.copy(screenFlashActive = false) }
+                    if (useScreenFlash) {
+                        cameraManager.setAeLock(false)
+                        _uiState.update { it.copy(screenFlashActive = false) }
+                    }
                     _uiState.update { it.copy(isCapturing = false, error = "Capture failed: ${e.message}") }
                 }
         }

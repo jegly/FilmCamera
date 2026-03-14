@@ -200,7 +200,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             // Top plate strip
-            CameraTopPlate(film = uiState.selectedFilm, photosTaken = uiState.photosTaken)
+            CameraTopPlate(film = uiState.selectedFilm)
 
             // Main body
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -271,7 +271,6 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                             accentColor = uiState.selectedFilm.accentColor,
                             isCapturing = uiState.isCapturing,
                             processingCount = uiState.processingCount,
-                            rollFinished = uiState.rollFinished,
                             onShutter = viewModel::capture,
                         )
                     }
@@ -311,17 +310,13 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
 
         // ── Overlays ──────────────────────────────────────────────────────────
 
-        // Front-camera screen flash — pure white fill, fades out after shutter
+        // Front-camera screen flash — pure white fill, instant on, slow fade-out after shutter
         AnimatedVisibility(
             visible = uiState.screenFlashActive,
-            enter = fadeIn(animationSpec = tween(40)),
+            enter = fadeIn(animationSpec = tween(0)),
             exit = fadeOut(animationSpec = tween(350)),
         ) {
             Box(modifier = Modifier.fillMaxSize().background(Color.White))
-        }
-
-        AnimatedVisibility(visible = uiState.rollFinished, enter = fadeIn(), exit = fadeOut()) {
-            RollFinishedOverlay(onReload = viewModel::reloadRoll)
         }
 
         AnimatedVisibility(
@@ -371,7 +366,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
 // ── Top plate ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun CameraTopPlate(film: FilmStock, photosTaken: Int) {
+private fun CameraTopPlate(film: FilmStock) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -398,21 +393,6 @@ private fun CameraTopPlate(film: FilmStock, photosTaken: Int) {
             fontSize = 7.sp,
             letterSpacing = 1.sp,
         )
-        // Shot indicator dots
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            repeat(5) { i ->
-                Box(
-                    modifier = Modifier
-                        .size(4.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (i < (photosTaken / 7).coerceAtMost(5))
-                                film.accentColor.copy(alpha = 0.8f)
-                            else Color(0xFF2A2A2A)
-                        ),
-                )
-            }
-        }
     }
 }
 
@@ -883,11 +863,10 @@ private fun ShutterButton(
     accentColor: Color,
     isCapturing: Boolean,
     processingCount: Int,
-    rollFinished: Boolean,
     onShutter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shutterEnabled = !isCapturing && !rollFinished
+    val shutterEnabled = !isCapturing
     val shutterScale by animateFloatAsState(
         targetValue = if (isCapturing) 0.86f else 1f,
         animationSpec = tween(80),
@@ -920,14 +899,6 @@ private fun ShutterButton(
             Box(
                 modifier = Modifier.size(8.dp).clip(CircleShape)
                     .background(accentColor.copy(alpha = 0.7f)),
-            )
-        } else if (rollFinished) {
-            Text(
-                text = "✕",
-                color = Color(0xFF444444),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
             )
         }
     }
@@ -1193,32 +1164,3 @@ private fun DateChip(
     }
 }
 
-// ── Roll finished ─────────────────────────────────────────────────────────────
-
-@Composable
-private fun RollFinishedOverlay(onReload: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text("END OF ROLL", color = AmberLcd, fontFamily = FontFamily.Monospace,
-                fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
-            Text("36 exposures", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-            Spacer(Modifier.height(6.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(AmberLcd)
-                    .clickable(onClick = onReload)
-                    .padding(horizontal = 24.dp, vertical = 10.dp),
-            ) {
-                Text("RELOAD ROLL", color = Color.Black, fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-            }
-        }
-    }
-}
