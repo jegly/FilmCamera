@@ -16,29 +16,49 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -53,17 +73,30 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
+import com.photoncam.processing.DateImprintBlur
+import com.photoncam.processing.DateImprintColor
+import com.photoncam.processing.DateImprintFont
+import com.photoncam.processing.DateImprintPosition
+import com.photoncam.processing.DateImprintSize
+import com.photoncam.processing.DateImprintStyle
 import com.photoncam.ui.filmselect.FilmSelectorSheet
 
-private val BodyColor = Color(0xFF1A1A1A)
-private val BodyColorDark = Color(0xFF141414)
-private val AmberLcd = Color(0xFFFFAA00)
-private val ChromeLight = Color(0xFF9A9A9A)
-private val ChromeShadow = Color(0xFF4A4A4A)
-private val ButtonBg = Color(0xFF252525)
-private val ButtonBorder = Color(0xFF383838)
+// ── Camera body palette ───────────────────────────────────────────────────────
+private val Body          = Color(0xFF181818)
+private val BodyLeather   = Color(0xFF1E1A17)  // warm dark brown-black
+private val BodyMetal     = Color(0xFF242424)
+private val TopPlate      = Color(0xFF222222)
+private val ChromeHi      = Color(0xFF8C8C8C)
+private val ChromeLo      = Color(0xFF505050)
+private val AmberLcd      = Color(0xFFFF9900)
+private val LcdBg         = Color(0xFF080808)
+private val BtnTop        = Color(0xFF2E2E2E)
+private val BtnBot        = Color(0xFF141414)
+private val BtnBorder     = Color(0xFF383838)
+private val SepLine       = Color(0xFF2C2C2C)
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -71,212 +104,223 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraPermission = rememberPermissionState(android.Manifest.permission.CAMERA)
 
+    val cameraPermission = rememberPermissionState(android.Manifest.permission.CAMERA)
     LaunchedEffect(Unit) {
         if (!cameraPermission.status.isGranted) cameraPermission.launchPermissionRequest()
     }
 
-    // ── Camera body ────────────────────────────────────────────────────────────
+    val previewView = remember { PreviewView(context) }
+    // Use selectedLens?.id (String) as key — CameraSelector doesn't implement equals()
+    // so using the full LensInfo would fail to detect lens changes reliably.
+    LaunchedEffect(lifecycleOwner, uiState.selectedLens?.id) {
+        if (cameraPermission.status.isGranted) {
+            viewModel.bindCamera(lifecycleOwner, previewView)
+        }
+    }
+
+    // Screen flash: max brightness when active (front-camera flash simulation)
+    val activity = LocalContext.current as? Activity
+    LaunchedEffect(uiState.screenFlashActive) {
+        val lp = activity?.window?.attributes ?: return@LaunchedEffect
+        lp.screenBrightness = if (uiState.screenFlashActive) 1f
+                              else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        activity.window.attributes = lp
+    }
+
+    // Re-apply zoom ratio when the app returns to foreground.
+    // LaunchedEffect(selectedLens?.id) won't re-fire on resume since the key hasn't changed,
+    // so CameraX restores the preview but zoom stays at 1x without this observer.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.reapplyZoom()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val viewableUri = uiState.lastCapturedUri ?: uiState.latestGalleryUri
+
+    val onShare: () -> Unit = {
+        viewableUri?.let { uri ->
+            context.startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "image/jpeg"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                    "Share photo",
+                )
+            )
+        }
+    }
+
+    val onView: () -> Unit = {
+        viewableUri?.let { uri ->
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "image/jpeg")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            )
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BodyColor),
+            .background(Body),
     ) {
+        // Leatherette texture layer
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val dotSpacing = 10.dp.toPx()
+            val dotR = 1.dp.toPx()
+            var row = 0
+            var dy = 0f
+            while (dy < size.height) {
+                val offsetX = if (row % 2 == 0) 0f else dotSpacing / 2f
+                var dx = offsetX
+                while (dx < size.width) {
+                    drawCircle(
+                        color = Color(0x12FFFFFF),
+                        radius = dotR,
+                        center = Offset(dx, dy),
+                    )
+                    dx += dotSpacing
+                }
+                dy += dotSpacing * 0.87f
+                row++
+            }
+        }
+
+        // ── Main landscape layout ─────────────────────────────────────────────
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // ── LCD screen with chrome bezel ───────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(2f)
-                    .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp),
-            ) {
-                // Chrome bezel layers
+            // Top plate strip
+            CameraTopPlate(film = uiState.selectedFilm, photosTaken = uiState.photosTaken)
+
+            // Main body
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+
+                // ── LEFT: viewfinder area (60%) ───────────────────────────────
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(ChromeLight, ChromeShadow, ChromeLight),
-                            )
-                        )
-                        .padding(3.dp),
+                        .weight(1.6f)
+                        .fillMaxHeight()
+                        .background(BodyLeather),
                 ) {
+                    // Viewfinder window — inset from body edges
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color(0xFF111111))
-                            .padding(1.dp),
+                            .align(Alignment.Center)
+                            .fillMaxWidth(0.88f)
+                            .fillMaxHeight(0.90f),
                     ) {
-                        // Screen surface
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.Black),
-                        ) {
-                            if (cameraPermission.status.isGranted) {
-                                val previewView = remember { PreviewView(context) }
-                                LaunchedEffect(lifecycleOwner, uiState.selectedLens) {
-                                    viewModel.bindCamera(lifecycleOwner, previewView)
-                                }
-                                AndroidView(
-                                    factory = { previewView },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            } else {
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text(
-                                        "Camera permission required",
-                                        color = Color.White,
-                                        fontFamily = FontFamily.Monospace,
-                                    )
-                                }
-                            }
-
-                            // Film name overlay (top-left of LCD)
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .background(Color.Black.copy(alpha = 0.5f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) {
-                                Text(
-                                    text = "${uiState.selectedFilm.brand.displayName.uppercase()} ${uiState.selectedFilm.name}",
-                                    color = uiState.selectedFilm.accentColor.copy(alpha = 0.9f),
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
-                                    letterSpacing = 1.sp,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Amber LCD readout strip ────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF0D0D0D))
-                    .padding(horizontal = 14.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Lens
-                LcdText(
-                    label = "LENS",
-                    value = uiState.selectedLens?.label ?: "—",
-                )
-                // EV
-                val evValue = uiState.evIndex * uiState.evStep
-                val evText = when {
-                    evValue > 0.0 -> "+${"%.1f".format(evValue)}"
-                    evValue < 0.0 -> "${"%.1f".format(evValue)}"
-                    else -> "±0.0"
-                }
-                LcdText(label = "EV", value = evText)
-                // Frames
-                LcdText(
-                    label = "FRAMES",
-                    value = "${uiState.framesRemaining.toString().padStart(2, '0')}/36",
-                    valueColor = if (uiState.framesRemaining <= 6) Color(0xFFFF4444) else AmberLcd,
-                )
-            }
-
-            // ── Camera controls body ───────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(BodyColorDark)
-                    .padding(horizontal = 22.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Left: small physical buttons + film pill
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.Start,
-                ) {
-                    // Film selector pill
-                    FilmPill(
-                        film = uiState.selectedFilm,
-                        onClick = viewModel::toggleFilmSelector,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    // Small function buttons
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SmallCameraButton(
-                            label = "DATE",
-                            highlighted = uiState.dateImprintEnabled,
-                            accentColor = uiState.selectedFilm.accentColor,
-                            onClick = viewModel::toggleDateImprint,
-                        )
-                        SmallCameraButton(
-                            label = "SHARE",
-                            highlighted = uiState.lastCapturedUri != null,
-                            accentColor = uiState.selectedFilm.accentColor,
-                            enabled = uiState.lastCapturedUri != null,
-                            onClick = {
-                                uiState.lastCapturedUri?.let { uri ->
-                                    context.startActivity(
-                                        Intent.createChooser(
-                                            Intent(Intent.ACTION_SEND).apply {
-                                                type = "image/jpeg"
-                                                putExtra(Intent.EXTRA_STREAM, uri)
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            },
-                                            "Share photo",
-                                        )
-                                    )
-                                }
-                            },
+                        ViewfinderWindow(
+                            uiState = uiState,
+                            previewView = previewView,
+                            cameraGranted = cameraPermission.status.isGranted,
                         )
                     }
+
+                    // Rivet decorations
+                    Rivet(modifier = Modifier.align(Alignment.TopStart).padding(6.dp))
+                    Rivet(modifier = Modifier.align(Alignment.TopEnd).padding(6.dp))
+                    Rivet(modifier = Modifier.align(Alignment.BottomStart).padding(6.dp))
+                    Rivet(modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp))
                 }
 
-                // Right: D-pad navigation ring
+                // Thin separator line
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(SepLine))
+
+                // ── RIGHT: controls panel (40%) ───────────────────────────────
                 Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(BodyMetal)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    DPadControl(
+                    // Flash (left) / D-pad / Shutter right
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        FlashMiniButton(
+                            enabled = uiState.flashEnabled,
+                            isFrontCamera = uiState.selectedLens?.id == "camera_front",
+                            onClick = viewModel::toggleFlash,
+                        )
+                        DPadControl(
+                            accentColor = uiState.selectedFilm.accentColor,
+                            canEvUp = uiState.evRange?.let { uiState.evIndex < it.upper } ?: false,
+                            canEvDown = uiState.evRange?.let { uiState.evIndex > it.lower } ?: false,
+                            hasMultipleLenses = uiState.availableLenses.size > 1,
+                            onEvUp = { viewModel.adjustExposure(+1) },
+                            onEvDown = { viewModel.adjustExposure(-1) },
+                            onPrevLens = viewModel::selectPrevLens,
+                            onNextLens = viewModel::selectNextLens,
+                        )
+                        ShutterButton(
+                            accentColor = uiState.selectedFilm.accentColor,
+                            isCapturing = uiState.isCapturing,
+                            processingCount = uiState.processingCount,
+                            rollFinished = uiState.rollFinished,
+                            onShutter = viewModel::capture,
+                        )
+                    }
+
+                    Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(SepLine))
+
+                    // LCD readout (EV + PROC + SHOT)
+                    LcdReadout(uiState = uiState)
+
+                    Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(SepLine))
+
+                    // Lens selector pills
+                    LensSelectorRow(
+                        lenses = uiState.availableLenses,
+                        selected = uiState.selectedLens,
                         accentColor = uiState.selectedFilm.accentColor,
-                        isCapturing = uiState.isCapturing,
-                        isProcessing = uiState.isProcessing,
-                        rollFinished = uiState.rollFinished,
-                        canEvUp = uiState.evRange?.let { uiState.evIndex < it.upper } ?: false,
-                        canEvDown = uiState.evRange?.let { uiState.evIndex > it.lower } ?: false,
-                        hasMultipleLenses = uiState.availableLenses.size > 1,
-                        onEvUp = { viewModel.adjustExposure(+1) },
-                        onEvDown = { viewModel.adjustExposure(-1) },
-                        onPrevLens = viewModel::selectPrevLens,
-                        onNextLens = viewModel::selectNextLens,
-                        onShutter = viewModel::capture,
+                        onSelect = viewModel::selectLens,
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "▲▼ EV  ◄► LENS  ● SHOOT",
-                        color = Color(0xFF3A3A3A),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 7.sp,
-                        letterSpacing = 0.5.sp,
+
+                    Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(SepLine))
+
+                    // Action buttons grid
+                    ActionButtonsGrid(
+                        uiState = uiState,
+                        viewableUri = viewableUri,
+                        onFilmTap = viewModel::toggleFilmSelector,
+                        onDateMenuTap = viewModel::toggleDateImprintMenu,
+                        onToggleLightLeak = viewModel::toggleLightLeak,
+                        onView = onView,
+                        onShare = onShare,
                     )
+
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
 
-        // ── Overlays ───────────────────────────────────────────────────────────
+        // ── Overlays ──────────────────────────────────────────────────────────
 
+        // Front-camera screen flash — pure white fill, fades out after shutter
         AnimatedVisibility(
-            visible = uiState.rollFinished,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            visible = uiState.screenFlashActive,
+            enter = fadeIn(animationSpec = tween(40)),
+            exit = fadeOut(animationSpec = tween(350)),
         ) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.White))
+        }
+
+        AnimatedVisibility(visible = uiState.rollFinished, enter = fadeIn(), exit = fadeOut()) {
             RollFinishedOverlay(onReload = viewModel::reloadRoll)
         }
 
@@ -289,133 +333,485 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
             FilmSelectorSheet(
                 films = FilmCatalog.all,
                 selected = uiState.selectedFilm,
+                favoriteFilmIds = uiState.favoriteFilmIds,
                 onSelect = viewModel::selectFilm,
+                onToggleFavorite = viewModel::toggleFavorite,
                 onDismiss = viewModel::toggleFilmSelector,
+            )
+        }
+
+        AnimatedVisibility(
+            visible = uiState.showDateImprintMenu,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it }),
+        ) {
+            DateImprintMenuSheet(
+                uiState = uiState,
+                onDismiss = viewModel::toggleDateImprintMenu,
+                onSetEnabled = viewModel::setDateImprintEnabled,
+                onSetStyle = viewModel::setDateImprintStyle,
+                onSetColor = viewModel::setDateImprintColor,
+                onSetFont = viewModel::setDateImprintFont,
+                onSetSize = viewModel::setDateImprintSize,
+                onSetPosition = viewModel::setDateImprintPosition,
+                onSetBlur = viewModel::setDateImprintBlur,
             )
         }
 
         uiState.error?.let { msg ->
             Snackbar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                action = {
-                    TextButton(onClick = viewModel::dismissError) { Text("Dismiss") }
-                },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                action = { TextButton(onClick = viewModel::dismissError) { Text("Dismiss") } },
             ) { Text(msg) }
         }
     }
 }
 
-// ── Amber LCD readout ──────────────────────────────────────────────────────────
+// ── Top plate ─────────────────────────────────────────────────────────────────
 
 @Composable
-private fun LcdText(
-    label: String,
-    value: String,
-    valueColor: Color = AmberLcd,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun CameraTopPlate(film: FilmStock, photosTaken: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(22.dp)
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFF2E2E2E), TopPlate))
+            )
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
         Text(
-            text = label,
-            color = Color(0xFF4A4A4A),
+            text = "PHOTONCAM",
+            color = ChromeHi,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 3.sp,
+        )
+        Text(
+            text = "${film.brand.displayName.uppercase()}  ${film.name.uppercase()}  ISO${film.iso}",
+            color = ChromeLo,
             fontFamily = FontFamily.Monospace,
             fontSize = 7.sp,
             letterSpacing = 1.sp,
         )
-        Text(
-            text = value,
-            color = valueColor,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-        )
-    }
-}
-
-// ── Film pill ─────────────────────────────────────────────────────────────────
-
-@Composable
-private fun FilmPill(film: FilmStock, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(ButtonBg)
-            .border(1.dp, film.accentColor.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-    ) {
-        Column {
-            Text(
-                text = film.brand.displayName.uppercase(),
-                color = Color(0xFF555555),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 8.sp,
-                letterSpacing = 2.sp,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = film.name,
-                    color = film.accentColor,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+        // Shot indicator dots
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            repeat(5) { i ->
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (i < (photosTaken / 7).coerceAtMost(5))
+                                film.accentColor.copy(alpha = 0.8f)
+                            else Color(0xFF2A2A2A)
+                        ),
                 )
-                Spacer(Modifier.width(4.dp))
-                Text("▾", color = film.accentColor.copy(alpha = 0.5f), fontSize = 9.sp)
             }
         }
     }
 }
 
-// ── Small physical-looking camera button ──────────────────────────────────────
+// ── Viewfinder window ─────────────────────────────────────────────────────────
 
 @Composable
-private fun SmallCameraButton(
+private fun ViewfinderWindow(
+    uiState: ViewfinderUiState,
+    previewView: PreviewView,
+    cameraGranted: Boolean,
+) {
+    // Outer chrome bezel
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(4.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(ChromeHi, ChromeLo, ChromeHi, ChromeLo)
+                )
+            )
+            .padding(3.dp),
+    ) {
+        // Inner rubber gasket
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color(0xFF0C0C0C))
+                .padding(1.dp),
+        ) {
+            // Actual viewfinder screen
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.Black),
+            ) {
+                if (cameraGranted) {
+                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Camera permission required",
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
+
+                // Film name badge — top-right only
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .clip(RoundedCornerShape(bottomStart = 3.dp))
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = uiState.selectedFilm.name,
+                        color = uiState.selectedFilm.accentColor.copy(alpha = 0.92f),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp,
+                    )
+                }
+
+                // EV indicator — bottom-left
+                val evValue = uiState.evIndex * uiState.evStep
+                if (evValue != 0.0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .clip(RoundedCornerShape(topEnd = 3.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = if (evValue > 0) "+${"%.1f".format(evValue)}" else "${"%.1f".format(evValue)}",
+                            color = AmberLcd.copy(alpha = 0.9f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Decorative rivet ──────────────────────────────────────────────────────────
+
+@Composable
+private fun Rivet(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.size(7.dp)) {
+        drawCircle(color = Color(0xFF3A3A3A))
+        drawCircle(
+            color = Color(0xFF505050),
+            radius = size.minDimension / 2f * 0.6f,
+        )
+        drawCircle(
+            color = Color(0xFF606060),
+            radius = size.minDimension / 2f * 0.25f,
+            center = Offset(size.width * 0.35f, size.height * 0.35f),
+        )
+    }
+}
+
+// ── LCD readout ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun LcdReadout(uiState: ViewfinderUiState) {
+    val evValue = uiState.evIndex * uiState.evStep
+    val evText = when {
+        evValue > 0.0 -> "+${"%.1f".format(evValue)}"
+        evValue < 0.0 -> "${"%.1f".format(evValue)}"
+        else -> "±0.0"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(3.dp))
+            .background(LcdBg)
+            .border(1.dp, Color(0xFF1C1C1C), RoundedCornerShape(3.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LcdCell("EV", evText)
+            // Processing indicator
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("PROC", color = Color(0xFF606060), fontFamily = FontFamily.Monospace, fontSize = 6.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    repeat(3) { i ->
+                        Box(
+                            modifier = Modifier
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (i < uiState.processingCount.coerceAtMost(3))
+                                        AmberLcd.copy(alpha = 0.8f)
+                                    else Color(0xFF1A1A1A)
+                                ),
+                        )
+                    }
+                }
+            }
+            LcdCell("SHOT", uiState.totalShotsTaken.toString().padStart(4, '0'),
+                valueColor = AmberLcd)
+        }
+    }
+}
+
+@Composable
+private fun LcdCell(label: String, value: String, valueColor: Color = AmberLcd) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Color(0xFF606060), fontFamily = FontFamily.Monospace,
+            fontSize = 6.sp, letterSpacing = 1.sp)
+        Text(value, color = valueColor, fontFamily = FontFamily.Monospace,
+            fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+    }
+}
+
+// ── Lens selector ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun LensSelectorRow(
+    lenses: List<LensInfo>,
+    selected: LensInfo?,
+    accentColor: Color,
+    onSelect: (LensInfo) -> Unit,
+) {
+    if (lenses.isEmpty()) {
+        // Single-lens device — show static label
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(BtnBot)
+                    .border(1.dp, BtnBorder, RoundedCornerShape(3.dp))
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = selected?.label ?: "LENS",
+                    color = accentColor,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        lenses.forEach { lens ->
+            val isSelected = lens.id == selected?.id
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        if (isSelected)
+                            Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.25f), accentColor.copy(alpha = 0.10f)))
+                        else
+                            Brush.verticalGradient(listOf(BtnTop, BtnBot))
+                    )
+                    .border(
+                        1.dp,
+                        if (isSelected) accentColor.copy(alpha = 0.7f) else BtnBorder,
+                        RoundedCornerShape(3.dp),
+                    )
+                    .clickable { onSelect(lens) }
+                    .padding(vertical = 5.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = lens.label,
+                    color = if (isSelected) accentColor else Color(0xFF666666),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
+
+// ── Action buttons ────────────────────────────────────────────────────────────
+
+@Composable
+private fun ActionButtonsGrid(
+    uiState: ViewfinderUiState,
+    viewableUri: android.net.Uri?,
+    onFilmTap: () -> Unit,
+    onDateMenuTap: () -> Unit,
+    onToggleLightLeak: () -> Unit,
+    onView: () -> Unit,
+    onShare: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        // Row 1: FILM + LEAKS
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            CamButton(
+                label = "${uiState.selectedFilm.brand.displayName}\n${uiState.selectedFilm.name}",
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = true,
+                modifier = Modifier.weight(1f),
+                onClick = onFilmTap,
+            )
+            CamButton(
+                label = if (uiState.lightLeakEnabled) "LEAKS\nON" else "LEAKS\nOFF",
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = uiState.lightLeakEnabled,
+                modifier = Modifier.weight(1f),
+                onClick = onToggleLightLeak,
+            )
+        }
+        // Row 2: DATE stamp menu button
+        val dateSummary = if (!uiState.dateImprintEnabled) "DATE STAMP\nOFF"
+        else "DATE  ${uiState.dateImprintStyle.formatPreview()}\n${uiState.dateImprintColor.label}  ${uiState.dateImprintPosition.label}"
+        CamButton(
+            label = dateSummary,
+            accentColor = uiState.selectedFilm.accentColor,
+            highlighted = uiState.dateImprintEnabled,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onDateMenuTap,
+        )
+        // Row 3: VIEW + SHARE
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            CamButton(
+                label = if (viewableUri != null) "VIEW  ◉" else "VIEW",
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = viewableUri != null,
+                enabled = viewableUri != null,
+                modifier = Modifier.weight(1f),
+                onClick = onView,
+            )
+            CamButton(
+                label = if (viewableUri != null) "SHARE  ▶" else "SHARE",
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = viewableUri != null,
+                enabled = viewableUri != null,
+                modifier = Modifier.weight(1f),
+                onClick = onShare,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CamButton(
     label: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     highlighted: Boolean = false,
-    accentColor: Color = Color(0xFFFF8C00),
+    accentColor: Color = AmberLcd,
     enabled: Boolean = true,
 ) {
     val textColor = when {
-        !enabled -> Color(0xFF333333)
+        !enabled    -> Color(0xFF1E1E1E)
         highlighted -> accentColor
-        else -> Color(0xFF888888)
+        else        -> Color(0xFF686868)
     }
+    val topColor = if (highlighted && enabled) Color(0xFF323232) else Color(0xFF2E2E2E)
+    val botColor = if (highlighted && enabled) Color(0xFF181818) else Color(0xFF151515)
+    val borderColor = if (highlighted && enabled) accentColor.copy(alpha = 0.45f)
+                      else Color(0xFF3C3C3C)
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(3.dp))
+        modifier = modifier
+            .clip(RoundedCornerShape(5.dp))
             .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF2E2E2E), Color(0xFF1E1E1E))
-                )
+                Brush.verticalGradient(listOf(topColor, botColor))
             )
-            .border(1.dp, ButtonBorder, RoundedCornerShape(3.dp))
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(borderColor.copy(alpha = 0.9f), borderColor.copy(alpha = 0.4f))
+                ),
+                shape = RoundedCornerShape(5.dp),
+            )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = textColor,
             fontFamily = FontFamily.Monospace,
-            fontSize = 9.sp,
-            letterSpacing = 1.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 9.5.sp,
+            lineHeight = 13.sp,
+            letterSpacing = 0.5.sp,
+            fontWeight = if (highlighted && enabled) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }
 
-// ── D-pad navigation ring ─────────────────────────────────────────────────────
+// ── Flash mini button (sits left of D-pad) ────────────────────────────────────
+
+@Composable
+private fun FlashMiniButton(
+    enabled: Boolean,
+    isFrontCamera: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val onColor  = Color(0xFF4CAF50)
+    val offColor = Color(0xFF883333)
+    val color    = if (enabled) onColor else offColor
+
+    Column(
+        modifier = modifier
+            .width(20.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(color.copy(alpha = if (enabled) 0.14f else 0.06f))
+            .border(1.dp, color.copy(alpha = if (enabled) 0.6f else 0.3f), RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(text = "⚡", color = color, fontSize = 9.sp)
+        // tiny indicator dot
+        Box(
+            modifier = Modifier
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = if (enabled) 0.9f else 0.3f)),
+        )
+        // SCR label when front camera
+        if (isFrontCamera) {
+            Text(
+                text = "S",
+                color = color.copy(alpha = 0.7f),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 6.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+// ── D-pad ─────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun DPadControl(
     accentColor: Color,
-    isCapturing: Boolean,
-    isProcessing: Boolean,
-    rollFinished: Boolean,
     canEvUp: Boolean,
     canEvDown: Boolean,
     hasMultipleLenses: Boolean,
@@ -423,203 +819,405 @@ private fun DPadControl(
     onEvDown: () -> Unit,
     onPrevLens: () -> Unit,
     onNextLens: () -> Unit,
-    onShutter: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val shutterEnabled = !isCapturing && !isProcessing && !rollFinished
+    Box(modifier = modifier.size(90.dp), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val r = size.minDimension / 2f - 2.dp.toPx()
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(Color(0xFF2C2C2C), Color(0xFF1A1A1A)),
+                    center = Offset(cx, cy),
+                ),
+                radius = r,
+                center = Offset(cx, cy),
+            )
+            drawCircle(
+                color = Color(0xFF404040),
+                radius = r,
+                center = Offset(cx, cy),
+                style = Stroke(width = 1.dp.toPx()),
+            )
+            // Knurling arc
+            drawArc(color = Color(0xFF4A4A4A), startAngle = 200f, sweepAngle = 100f,
+                useCenter = false, style = Stroke(width = 2.5.dp.toPx()),
+                size = Size(r * 1.6f, r * 1.6f),
+                topLeft = Offset(cx - r * 0.8f, cy - r * 0.8f))
+            drawCircle(color = Color(0xFF1C1C1C), radius = 20.dp.toPx(), center = Offset(cx, cy))
+        }
+
+        Box(modifier = Modifier.align(Alignment.TopCenter).size(width = 40.dp, height = 30.dp)
+            .clickable(enabled = canEvUp, onClick = onEvUp), contentAlignment = Alignment.Center) {
+            Text("▲", color = if (canEvUp) Color(0xFFCCCCCC) else Color(0xFF282828), fontSize = 11.sp)
+        }
+        Box(modifier = Modifier.align(Alignment.BottomCenter).size(width = 40.dp, height = 30.dp)
+            .clickable(enabled = canEvDown, onClick = onEvDown), contentAlignment = Alignment.Center) {
+            Text("▼", color = if (canEvDown) Color(0xFFCCCCCC) else Color(0xFF282828), fontSize = 11.sp)
+        }
+        Box(modifier = Modifier.align(Alignment.CenterStart).size(width = 30.dp, height = 40.dp)
+            .clickable(enabled = hasMultipleLenses, onClick = onPrevLens), contentAlignment = Alignment.Center) {
+            Text("◄", color = if (hasMultipleLenses) Color(0xFFCCCCCC) else Color(0xFF282828), fontSize = 10.sp)
+        }
+        Box(modifier = Modifier.align(Alignment.CenterEnd).size(width = 30.dp, height = 40.dp)
+            .clickable(enabled = hasMultipleLenses, onClick = onNextLens), contentAlignment = Alignment.Center) {
+            Text("►", color = if (hasMultipleLenses) Color(0xFFCCCCCC) else Color(0xFF282828), fontSize = 10.sp)
+        }
+
+        // Decorative center cap
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Brush.radialGradient(listOf(Color(0xFF3A3A3A), Color(0xFF1E1E1E))))
+                .border(1.dp, Color(0xFF505050), CircleShape),
+        )
+    }
+}
+
+// ── Shutter button ────────────────────────────────────────────────────────────
+
+@Composable
+private fun ShutterButton(
+    accentColor: Color,
+    isCapturing: Boolean,
+    processingCount: Int,
+    rollFinished: Boolean,
+    onShutter: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shutterEnabled = !isCapturing && !rollFinished
     val shutterScale by animateFloatAsState(
-        targetValue = if (isCapturing) 0.88f else 1f,
-        animationSpec = tween(100),
+        targetValue = if (isCapturing) 0.86f else 1f,
+        animationSpec = tween(80),
         label = "shutter_scale",
     )
 
     Box(
-        modifier = Modifier.size(116.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        // D-pad ring — Canvas drawn
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val r = size.minDimension / 2f
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-
-            // Outer ring fill
-            drawCircle(color = Color(0xFF282828), radius = r, center = androidx.compose.ui.geometry.Offset(cx, cy))
-
-            // Top highlight arc (light rim)
-            drawArc(
-                color = Color(0xFF484848),
-                startAngle = 210f,
-                sweepAngle = 120f,
-                useCenter = false,
-                style = Stroke(width = 3.dp.toPx()),
-            )
-            // Bottom shadow arc
-            drawArc(
-                color = Color(0xFF141414),
-                startAngle = 30f,
-                sweepAngle = 120f,
-                useCenter = false,
-                style = Stroke(width = 3.dp.toPx()),
-            )
-
-            // Inner cutout ring (lighter) to separate center button
-            val innerR = 24.dp.toPx()
-            drawCircle(
-                color = Color(0xFF1E1E1E),
-                radius = innerR + 6.dp.toPx(),
-                center = androidx.compose.ui.geometry.Offset(cx, cy),
-            )
-        }
-
-        // UP — EV+
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .size(width = 48.dp, height = 38.dp)
-                .clickable(enabled = canEvUp, onClick = onEvUp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "▲",
-                color = if (canEvUp) Color(0xFFCCCCCC) else Color(0xFF353535),
-                fontSize = 13.sp,
-            )
-        }
-
-        // DOWN — EV-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .size(width = 48.dp, height = 38.dp)
-                .clickable(enabled = canEvDown, onClick = onEvDown),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "▼",
-                color = if (canEvDown) Color(0xFFCCCCCC) else Color(0xFF353535),
-                fontSize = 13.sp,
-            )
-        }
-
-        // LEFT — prev lens
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(width = 38.dp, height = 48.dp)
-                .clickable(enabled = hasMultipleLenses, onClick = onPrevLens),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "◄",
-                color = if (hasMultipleLenses) Color(0xFFCCCCCC) else Color(0xFF353535),
-                fontSize = 12.sp,
-            )
-        }
-
-        // RIGHT — next lens
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .size(width = 38.dp, height = 48.dp)
-                .clickable(enabled = hasMultipleLenses, onClick = onNextLens),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "►",
-                color = if (hasMultipleLenses) Color(0xFFCCCCCC) else Color(0xFF353535),
-                fontSize = 12.sp,
-            )
-        }
-
-        // CENTER — OK / Shutter
-        Box(
-            modifier = Modifier
-                .scale(shutterScale)
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        listOf(
-                            if (shutterEnabled) Color(0xFFE8E8E8) else Color(0xFF3A3A3A),
-                            if (shutterEnabled) Color(0xFFBBBBBB) else Color(0xFF252525),
-                        )
+        modifier = modifier
+            .scale(shutterScale)
+            .size(76.dp)
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        if (shutterEnabled) Color(0xFFEEEEEE) else Color(0xFF2E2E2E),
+                        if (shutterEnabled) Color(0xFFBBBBBB) else Color(0xFF1C1C1C),
                     )
                 )
-                .border(
-                    width = 2.dp,
-                    brush = Brush.linearGradient(
-                        listOf(
-                            if (shutterEnabled) accentColor else Color(0xFF2A2A2A),
-                            if (shutterEnabled) accentColor.copy(alpha = 0.5f) else Color(0xFF1A1A1A),
-                        )
-                    ),
-                    shape = CircleShape,
-                )
-                .clickable(enabled = shutterEnabled, onClick = onShutter),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (isProcessing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    color = accentColor,
-                    strokeWidth = 2.dp,
-                )
-            } else {
+            )
+            .border(
+                3.dp,
+                if (shutterEnabled) accentColor.copy(alpha = 0.8f) else Color(0xFF1E1E1E),
+                CircleShape,
+            )
+            .clickable(enabled = shutterEnabled, onClick = onShutter),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (processingCount > 0 && !isCapturing) {
+            // Small dot — background processing in progress
+            Box(
+                modifier = Modifier.size(8.dp).clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.7f)),
+            )
+        } else if (rollFinished) {
+            Text(
+                text = "✕",
+                color = Color(0xFF444444),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+// ── Date Imprint Menu Sheet ───────────────────────────────────────────────────
+
+@Composable
+private fun DateImprintMenuSheet(
+    uiState: ViewfinderUiState,
+    onDismiss: () -> Unit,
+    onSetEnabled: (Boolean) -> Unit,
+    onSetStyle: (DateImprintStyle) -> Unit,
+    onSetColor: (DateImprintColor) -> Unit,
+    onSetFont: (DateImprintFont) -> Unit,
+    onSetSize: (DateImprintSize) -> Unit,
+    onSetPosition: (DateImprintPosition) -> Unit,
+    onSetBlur: (DateImprintBlur) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 520.dp)
+            .background(Color(0xFF141414))
+            .windowInsetsPadding(WindowInsets.navigationBars),
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Handle bar
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .size(width = 40.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFF555555))
+                    .clickable(onClick = onDismiss),
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    text = if (rollFinished) "✕" else "OK",
-                    color = if (shutterEnabled) Color(0xFF333333) else Color(0xFF555555),
+                    text = "DATE STAMP",
+                    color = Color(0xFF888888),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    letterSpacing = 3.sp,
                 )
+                Switch(
+                    checked = uiState.dateImprintEnabled,
+                    onCheckedChange = onSetEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AmberLcd,
+                        checkedTrackColor = AmberLcd.copy(alpha = 0.35f),
+                        uncheckedThumbColor = Color(0xFF555555),
+                        uncheckedTrackColor = Color(0xFF222222),
+                    ),
+                )
+            }
+
+            HorizontalDivider(color = Color(0xFF242424))
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Format
+                DateMenuSection(label = "FORMAT") {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                    ) {
+                        items(DateImprintStyle.entries) { style ->
+                            DateChip(
+                                label = style.formatPreview(),
+                                selected = uiState.dateImprintStyle == style && uiState.dateImprintEnabled,
+                                enabled = uiState.dateImprintEnabled,
+                                accentColor = uiState.selectedFilm.accentColor,
+                                onClick = { onSetStyle(style) },
+                            )
+                        }
+                    }
+                }
+
+                // Color
+                DateMenuSection(label = "COLOR") {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                    ) {
+                        items(DateImprintColor.entries) { color ->
+                            val chipColor = try {
+                                Color(android.graphics.Color.parseColor(color.hex))
+                            } catch (_: Exception) { AmberLcd }
+                            DateChip(
+                                label = color.label,
+                                selected = uiState.dateImprintColor == color && uiState.dateImprintEnabled,
+                                enabled = uiState.dateImprintEnabled,
+                                accentColor = chipColor,
+                                onClick = { onSetColor(color) },
+                            )
+                        }
+                    }
+                }
+
+                // Font + Size on same row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("FONT", color = Color(0xFF444444), fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp, letterSpacing = 2.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            DateImprintFont.entries.forEach { font ->
+                                DateChip(
+                                    label = font.label,
+                                    selected = uiState.dateImprintFont == font && uiState.dateImprintEnabled,
+                                    enabled = uiState.dateImprintEnabled,
+                                    accentColor = uiState.selectedFilm.accentColor,
+                                    onClick = { onSetFont(font) },
+                                )
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("SIZE", color = Color(0xFF444444), fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp, letterSpacing = 2.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            DateImprintSize.entries.forEach { size ->
+                                DateChip(
+                                    label = size.label,
+                                    selected = uiState.dateImprintSize == size && uiState.dateImprintEnabled,
+                                    enabled = uiState.dateImprintEnabled,
+                                    accentColor = uiState.selectedFilm.accentColor,
+                                    onClick = { onSetSize(size) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Position
+                DateMenuSection(label = "POSITION") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DateImprintPosition.entries.forEach { pos ->
+                            DateChip(
+                                label = pos.label,
+                                selected = uiState.dateImprintPosition == pos && uiState.dateImprintEnabled,
+                                enabled = uiState.dateImprintEnabled,
+                                accentColor = uiState.selectedFilm.accentColor,
+                                onClick = { onSetPosition(pos) },
+                            )
+                        }
+                    }
+                }
+
+                // Glow
+                DateMenuSection(label = "GLOW") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DateImprintBlur.entries.forEach { blurOption ->
+                            DateChip(
+                                label = blurOption.label,
+                                selected = uiState.dateImprintBlur == blurOption && uiState.dateImprintEnabled,
+                                enabled = uiState.dateImprintEnabled,
+                                accentColor = uiState.selectedFilm.accentColor,
+                                onClick = { onSetBlur(blurOption) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = Color(0xFF242424))
+
+            // SAVE / CLOSE button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(
+                            Brush.verticalGradient(listOf(Color(0xFF2A2A2A), Color(0xFF1A1A1A)))
+                        )
+                        .border(
+                            1.dp,
+                            AmberLcd.copy(alpha = 0.5f),
+                            RoundedCornerShape(5.dp),
+                        )
+                        .clickable(onClick = onDismiss)
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "SAVE  ✓",
+                        color = AmberLcd,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                    )
+                }
             }
         }
     }
 }
 
-// ── Roll finished overlay ─────────────────────────────────────────────────────
+@Composable
+private fun DateMenuSection(label: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Color(0xFF444444), fontFamily = FontFamily.Monospace,
+            fontSize = 8.sp, letterSpacing = 2.sp)
+        content()
+    }
+}
+
+@Composable
+private fun DateChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(
+                if (selected) accentColor.copy(alpha = 0.18f) else Color(0xFF1C1C1C)
+            )
+            .border(
+                1.dp,
+                if (selected) accentColor.copy(alpha = 0.7f) else Color(0xFF333333),
+                RoundedCornerShape(4.dp),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = label,
+            color = when {
+                !enabled -> Color(0xFF2A2A2A)
+                selected -> accentColor
+                else     -> Color(0xFF666666)
+            },
+            fontFamily = FontFamily.Monospace,
+            fontSize = 9.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        )
+    }
+}
+
+// ── Roll finished ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun RollFinishedOverlay(onReload: () -> Unit) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.88f)),
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f)),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                text = "END OF ROLL",
-                color = AmberLcd,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 4.sp,
-            )
-            Text(
-                text = "36 exposures",
-                color = Color(0xFF666666),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-            )
-            Spacer(Modifier.height(8.dp))
+            Text("END OF ROLL", color = AmberLcd, fontFamily = FontFamily.Monospace,
+                fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+            Text("36 exposures", color = Color(0xFF555555), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(3.dp))
                     .background(AmberLcd)
                     .clickable(onClick = onReload)
-                    .padding(horizontal = 28.dp, vertical = 11.dp),
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
             ) {
-                Text(
-                    text = "RELOAD ROLL",
-                    color = Color.Black,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                )
+                Text("RELOAD ROLL", color = Color.Black, fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
             }
         }
     }

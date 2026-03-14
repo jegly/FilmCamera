@@ -43,7 +43,7 @@ android {
     applicationVariants.all {
         outputs.all {
             (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "photoncam-v${defaultConfig.versionName}-alpha1.apk"
+                "photoncam-v${defaultConfig.versionName}.apk"
         }
     }
 }
@@ -81,6 +81,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // DataStore
+    implementation(libs.datastore.preferences)
 
     // Testing
     testImplementation(libs.junit)

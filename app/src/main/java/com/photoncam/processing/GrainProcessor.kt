@@ -5,12 +5,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
-/**
- * Adds procedural film grain to a [Bitmap].
- *
- * Uses a fast per-pixel noise approach with a seeded pseudo-random sequence
- * so grain varies between shots.
- */
 @Singleton
 class GrainProcessor @Inject constructor() {
 
@@ -25,13 +19,12 @@ class GrainProcessor @Inject constructor() {
         val seed = System.nanoTime()
         val rng = Random(seed)
 
-        // Pre-generate a noise field; if grainSize > 1 we sample at lower resolution
         val noiseScale = (1f / size).coerceIn(0.1f, 1f)
         val noiseW = (width * noiseScale).toInt().coerceAtLeast(1)
         val noiseH = (height * noiseScale).toInt().coerceAtLeast(1)
         val noise = IntArray(noiseW * noiseH) { rng.nextInt(256) }
 
-        val maxDelta = (amount * 60f).toInt().coerceIn(1, 80)
+        val maxDelta = (amount * 72f).toInt().coerceIn(1, 72)
 
         for (i in pixels.indices) {
             val x = i % width
@@ -52,9 +45,8 @@ class GrainProcessor @Inject constructor() {
                 (b + delta.toInt()).coerceIn(0, 255)
         }
 
-        val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-        result.setPixels(pixels, 0, width, 0, 0, width, height)
-        bitmap.recycle()
-        return result
+        // Write modified pixels back onto the (already mutable) source bitmap in-place.
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+        return bitmap
     }
 }

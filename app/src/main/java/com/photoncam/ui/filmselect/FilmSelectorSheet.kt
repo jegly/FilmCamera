@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -39,21 +43,34 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.photoncam.film.FilmBrand
 import com.photoncam.film.FilmCatalog
+import com.photoncam.film.FilmCategory
 import com.photoncam.film.FilmStock
+import com.photoncam.film.LutType
 
 @Composable
 fun FilmSelectorSheet(
     films: List<FilmStock>,
     selected: FilmStock,
+    favoriteFilmIds: Set<String>,
     onSelect: (FilmStock) -> Unit,
+    onToggleFavorite: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var activeBrand by remember { mutableStateOf<FilmBrand?>(null) }
-    val displayed = if (activeBrand != null) films.filter { it.brand == activeBrand } else films
+    var activeBrand    by remember { mutableStateOf<FilmBrand?>(null) }
+    var activeCategory by remember { mutableStateOf<FilmCategory?>(null) }
+    var activeLutType  by remember { mutableStateOf<LutType?>(null) }
+    var favoritesOnly  by remember { mutableStateOf(false) }
+
+    val displayed = films
+        .let { if (activeBrand    != null) it.filter { f -> f.brand    == activeBrand    } else it }
+        .let { if (activeCategory != null) it.filter { f -> f.category == activeCategory } else it }
+        .let { if (activeLutType  != null) it.filter { f -> f.lutType  == activeLutType  } else it }
+        .let { if (favoritesOnly)          it.filter { f -> f.id in favoriteFilmIds }      else it }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
             .background(Color(0xFF161616)),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -69,20 +86,44 @@ fun FilmSelectorSheet(
                     .clickable(onClick = onDismiss),
             )
 
-            Text(
-                text = "SELECT FILM",
-                color = Color(0xFF888888),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                letterSpacing = 3.sp,
-                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
-            )
+            // Header row: title + close button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "SELECT FILM",
+                    color = Color(0xFF888888),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    letterSpacing = 3.sp,
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF2A2A2A))
+                        .border(1.dp, Color(0xFF3C3C3C), RoundedCornerShape(4.dp))
+                        .clickable(onClick = onDismiss)
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = "✕ CLOSE",
+                        color = Color(0xFF888888),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp,
+                    )
+                }
+            }
 
-            // Brand filter row
+            // ── Brand filter row ──────────────────────────────────────────────
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
+                modifier = Modifier.padding(bottom = 6.dp),
             ) {
                 item {
                     BrandChip(
@@ -102,24 +143,117 @@ fun FilmSelectorSheet(
                 }
             }
 
+            // ── Category filter row (incl. FAVORITES) ─────────────────────────
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(bottom = 6.dp),
+            ) {
+                item {
+                    CategoryChip(
+                        label = "★ FAV",
+                        active = favoritesOnly,
+                        color = Color(0xFFFFD700),
+                        onClick = { favoritesOnly = !favoritesOnly },
+                    )
+                }
+                item {
+                    CategoryChip(
+                        label = "ALL",
+                        active = activeCategory == null,
+                        color = Color(0xFF888888),
+                        onClick = { activeCategory = null },
+                    )
+                }
+                items(FilmCategory.entries) { cat ->
+                    val catColor = when (cat) {
+                        FilmCategory.COLOR          -> Color(0xFFE8A040)
+                        FilmCategory.BLACK_AND_WHITE -> Color(0xFFCCCCCC)
+                        FilmCategory.SLIDE          -> Color(0xFF5BA4CF)
+                        FilmCategory.CROSS_PROCESS  -> Color(0xFFFF6B35)
+                        FilmCategory.INSTANT        -> Color(0xFFAA99BB)
+                        FilmCategory.INFRARED       -> Color(0xFF8899AA)
+                    }
+                    CategoryChip(
+                        label = cat.displayName.uppercase(),
+                        active = activeCategory == cat,
+                        color = catColor,
+                        onClick = { activeCategory = if (activeCategory == cat) null else cat },
+                    )
+                }
+            }
+
+            // ── LUT type filter row ───────────────────────────────────────────
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(bottom = 10.dp),
+            ) {
+                item {
+                    CategoryChip(
+                        label = "ALL LUT",
+                        active = activeLutType == null,
+                        color = Color(0xFF888888),
+                        onClick = { activeLutType = null },
+                    )
+                }
+                items(LutType.entries) { lut ->
+                    val lutColor = when (lut) {
+                        LutType.PNG    -> Color(0xFF6AB06A)
+                        LutType.CUBE   -> Color(0xFF6A88D0)
+                        LutType.PRESET -> Color(0xFF888888)
+                    }
+                    CategoryChip(
+                        label = lut.name,
+                        active = activeLutType == lut,
+                        color = lutColor,
+                        onClick = { activeLutType = if (activeLutType == lut) null else lut },
+                    )
+                }
+            }
+
             HorizontalDivider(color = Color(0xFF2A2A2A))
 
-            // Film list
+            // ── Film list ─────────────────────────────────────────────────────
             LazyColumn(
                 contentPadding = PaddingValues(vertical = 4.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(340.dp),
+                    .height(300.dp),
             ) {
                 items(displayed) { film ->
                     FilmRow(
                         film = film,
                         isSelected = film.id == selected.id,
+                        isFavorite = film.id in favoriteFilmIds,
+                        onToggleFavorite = { onToggleFavorite(film.id) },
                         onClick = { onSelect(film) },
                     )
                 }
             }
+
+            HorizontalDivider(color = Color(0xFF2A2A2A))
         }
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, active: Boolean, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (active) color.copy(alpha = 0.18f) else Color.Transparent)
+            .border(1.dp, if (active) color else Color(0xFF2E2E2E), RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (active) color else Color(0xFF666666),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            letterSpacing = 1.sp,
+        )
     }
 }
 
@@ -144,14 +278,20 @@ private fun BrandChip(label: String, active: Boolean, color: Color, onClick: () 
 }
 
 @Composable
-private fun FilmRow(film: FilmStock, isSelected: Boolean, onClick: () -> Unit) {
+private fun FilmRow(
+    film: FilmStock,
+    isSelected: Boolean,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .background(if (isSelected) film.accentColor.copy(alpha = 0.08f) else Color.Transparent)
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = CenterVertically,
     ) {
         // Film canister icon
         FilmCanisterIcon(color = film.accentColor)
@@ -187,6 +327,35 @@ private fun FilmRow(film: FilmStock, isSelected: Boolean, onClick: () -> Unit) {
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
             )
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Favorite star
+        Text(
+            text = if (isFavorite) "★" else "☆",
+            color = if (isFavorite) Color(0xFFFFD700) else Color(0xFF383838),
+            fontSize = 20.sp,
+            modifier = Modifier
+                .clickable(onClick = onToggleFavorite)
+                .padding(horizontal = 4.dp),
+        )
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // LUT type badge
+        val (lutBg, lutFg, lutLabel) = when (film.lutType) {
+            LutType.PNG    -> Triple(Color(0xFF1A2E1A), Color(0xFF6AB06A), "PNG")
+            LutType.CUBE   -> Triple(Color(0xFF1A1E30), Color(0xFF6A88D0), "CUBE")
+            LutType.PRESET -> Triple(Color(0xFF222222), Color(0xFF666666), "PRESET")
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(3.dp))
+                .background(lutBg)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(text = lutLabel, color = lutFg, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
         }
     }
 }

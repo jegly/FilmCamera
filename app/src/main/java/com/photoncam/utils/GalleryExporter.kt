@@ -80,6 +80,38 @@ class GalleryExporter @Inject constructor(
     }
 
     /**
+     * Queries MediaStore for the most recently saved PhotonCam photo.
+     * Returns null if no photos exist yet. Used to populate the VIEW button on startup.
+     */
+    fun getLatestPhotoUri(): Uri? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val projection = arrayOf(MediaStore.Images.Media._ID)
+            val selection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ?"
+            val selectionArgs = arrayOf("%PhotonCam%")
+            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection, selection, selectionArgs, sortOrder,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID))
+                    Uri.withAppendedPath(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id.toString())
+                } else null
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val picturesDir = File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                "PhotonCam",
+            )
+            picturesDir.listFiles()
+                ?.filter { it.extension.lowercase() == "jpg" }
+                ?.maxByOrNull { it.lastModified() }
+                ?.let { Uri.fromFile(it) }
+        }
+    }
+
+    /**
      * Converts a private cache [File] to a content:// [Uri] via FileProvider
      * so it can be shared with other apps.
      */

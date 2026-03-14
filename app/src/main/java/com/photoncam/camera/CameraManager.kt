@@ -2,7 +2,11 @@ package com.photoncam.camera
 
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager as Camera2Manager
 import android.util.Range
+import android.util.Size
+import android.view.OrientationEventListener
+import android.view.Surface
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -30,7 +34,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Singleton
@@ -39,54 +42,130 @@ class CameraManager @Inject constructor(
 ) {
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var imageCapture: ImageCapture? = null
-    private var camera: Camera? = null
+    @Volatile private var camera: Camera? = null
     private var cachedProvider: ProcessCameraProvider? = null
 
-    // ── Lens enumeration ──────────────────────────────────────────────────────
+    val isBound: Boolean get() = camera != null
+    val currentLensFacing: Int? get() = camera?.cameraInfo?.lensFacing
 
-    @androidx.camera.camera2.interop.ExperimentalCamera2Interop
-    suspend fun getAvailableLenses(): List<LensInfo> = withContext(Dispatchers.Main) {
-        val provider = getCameraProvider()
-        val backCameras = provider.availableCameraInfos.filter {
-            it.lensFacing == CameraSelector.LENS_FACING_BACK
-        }
-
-        val lensesWithFl = backCameras.mapNotNull { info ->
-            runCatching {
-                val c2info = Camera2CameraInfo.from(info)
-                val id = c2info.cameraId
-                val fls = c2info.getCameraCharacteristic(
-                    CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS
-                ) ?: return@runCatching null
-                val fl = fls.minOrNull() ?: return@runCatching null
-                LensInfo(
-                    id = id,
-                    label = fl.toString(),
-                    selector = CameraSelector.Builder()
-                        .addCameraFilter { list ->
-                            list.filter { Camera2CameraInfo.from(it).cameraId == id }
-                        }.build(),
-                ) to fl
-            }.getOrNull()
-        }.sortedBy { it.second }
-
-        if (lensesWithFl.isEmpty()) {
-            return@withContext listOf(LensInfo("0", "1×", CameraSelector.DEFAULT_BACK_CAMERA))
-        }
-
-        val flValues = lensesWithFl.map { it.second }
-        val median = flValues.sorted()[flValues.size / 2]
-        val refFl = lensesWithFl.minByOrNull { (_, fl) -> abs(fl - median) }!!.second
-
-        lensesWithFl.map { (lens, fl) ->
-            val zoom = fl / refFl
-            val label = when {
-                zoom < 0.95 -> "${"%.1f".format(zoom)}×"
-                zoom < 1.05 -> "1×"
-                else -> "${zoom.roundToInt()}×"
+    // ── Orientation tracking ──────────────────────────────────────────────────
+    //
+    // CameraX's ImageCapture.targetRotation defaults to Surface.ROTATION_0 and
+    // never changes on its own. Without updating it, the EXIF orientation tag is
+    // always written as "portrait" regardless of how the phone is held, so landscape
+    // photos appear rotated after processing. The OrientationEventListener (backed
+    // by the accelerometer) fires as the device rotates and keeps targetRotation
+    // in sync with the real physical orientation.
+    private val orientationListener = object : OrientationEventListener(context) {
+        override fun onOrientationChanged(orientation: Int) {
+            if (orientation == ORIENTATION_UNKNOWN) return
+            val rotation = when {
+                orientation < 45 || orientation >= 315 -> Surface.ROTATION_0   // portrait
+                orientation < 135                      -> Surface.ROTATION_270  // landscape right
+                orientation < 225                      -> Surface.ROTATION_180  // upside-down portrait
+                else                                   -> Surface.ROTATION_90   // landscape left
             }
-            lens.copy(label = label)
+            imageCapture?.targetRotation = rotation
         }
+    }
+
+    // ── Lens enumeration (zoom-ratio based) ───────────────────────────────────
+    //
+    // Modern Android phones (Pixel, Samsung, etc.) expose rear cameras as a
+    // single logical multi-camera. CameraX's availableCameraInfos often returns
+    // only that one logical camera, so the old approach of enumerating back cameras
+    // and rebinding to each physical camera ID never found more than 1 lens.
+    //
+    // Instead, we use the logical camera's ZoomState (min/max ratio) together with
+    // Camera2's physical camera characteristics to infer optical zoom breakpoints.
+    // Switching lens = setZoomRatio() on the already-bound logical camera; no rebind.
+
+    /**
+     * Discovers available lenses after the camera is bound.
+     * Uses ZoomState.minZoomRatio for ultrawide and Camera2 physical camera
+     * enumeration to detect telephoto.  Must be called on the main thread.
+     */
+    fun discoverZoomLenses(): List<LensInfo> {
+        val cam = camera ?: return emptyList()
+        val zoomState = cam.cameraInfo.zoomState.value ?: return emptyList()
+        val minRatio = zoomState.minZoomRatio
+
+        // Count distinct back-camera focal lengths via Camera2 for telephoto detection.
+        // We include all back-facing cameras (physical + logical) and deduplicate by FL
+        // value so that a logical camera reporting the same FL as a physical one doesn't
+        // inflate the count. This avoids needing the API-28-only LOGICAL_MULTI_CAMERA_PHYSICAL_IDS.
+        val cam2 = context.getSystemService(Context.CAMERA_SERVICE) as Camera2Manager
+        val physicalBackFls: List<Float> = cam2.cameraIdList.mapNotNull { id ->
+            runCatching {
+                val chars = cam2.getCameraCharacteristics(id)
+                if (chars.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK)
+                    return@runCatching null
+                chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.minOrNull()
+            }.getOrNull()
+        }.sortedBy { it }.distinctBy { "%.2f".format(it) }
+
+        val lenses = mutableListOf<LensInfo>()
+
+        // Ultrawide: present when the logical camera can zoom out below 1×
+        if (minRatio < 0.95f) {
+            lenses.add(
+                LensInfo(
+                    id = "zoom_wide",
+                    label = "%.1f×".format(minRatio),
+                    selector = CameraSelector.DEFAULT_BACK_CAMERA,
+                    zoomRatio = minRatio,
+                )
+            )
+        }
+
+        // Main: always 1×
+        lenses.add(
+            LensInfo(
+                id = "zoom_main",
+                label = "1×",
+                selector = CameraSelector.DEFAULT_BACK_CAMERA,
+                zoomRatio = 1.0f,
+            )
+        )
+
+        // Telephoto: present when there are 3+ physical back cameras and the longest
+        // focal length is at least 1.5× the median (distinguishes tele from main).
+        if (physicalBackFls.size >= 3) {
+            val medianFl = physicalBackFls[physicalBackFls.size / 2]
+            val teleFl = physicalBackFls.last()
+            if (teleFl / medianFl >= 1.5f) {
+                val teleRatio = (teleFl / medianFl).roundToInt().toFloat().coerceAtLeast(2f)
+                lenses.add(
+                    LensInfo(
+                        id = "zoom_tele",
+                        label = "${teleRatio.toInt()}×",
+                        selector = CameraSelector.DEFAULT_BACK_CAMERA,
+                        zoomRatio = teleRatio,
+                    )
+                )
+            }
+        }
+
+        // Front camera: always appended last so back lenses come first in the ring
+        val hasFront = cam2.cameraIdList.any { id ->
+            runCatching {
+                cam2.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            }.getOrDefault(false)
+        }
+        if (hasFront) {
+            lenses.add(
+                LensInfo(
+                    id = "camera_front",
+                    label = "Front",
+                    selector = CameraSelector.DEFAULT_FRONT_CAMERA,
+                    zoomRatio = null,  // Front camera requires a full rebind
+                )
+            )
+        }
+
+        // Only return if there are actually multiple options
+        return if (lenses.size > 1) lenses else emptyList()
     }
 
     // ── Camera binding ────────────────────────────────────────────────────────
@@ -96,32 +175,83 @@ class CameraManager @Inject constructor(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
         lensInfo: LensInfo? = null,
-    ): Result<ExposureState> = withContext(Dispatchers.Main) {
-        runCatching {
-            val cameraProvider = getCameraProvider()
+    ): Result<ExposureState> {
+        val result = withContext(Dispatchers.Main) {
+            runCatching {
+                val cameraProvider = getCameraProvider()
 
-            // FIT_CENTER = no crop, shows full sensor with letterboxing if aspect ratios differ
-            previewView.scaleType = PreviewView.ScaleType.FIT_CENTER
+                previewView.scaleType = PreviewView.ScaleType.FIT_CENTER
 
-            val preview = Preview.Builder().build()
-                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                val preview = Preview.Builder().build()
+                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
-            imageCapture = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                .setResolutionSelector(
-                    ResolutionSelector.Builder()
-                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-                        .build()
+                // Cap capture resolution at 4096px on the long edge.
+                // Larger sensors (e.g. 50 MP) produce bitmaps that overflow the
+                // processing heap; anything above ~12 MP gives no visible benefit
+                // after film simulation and JPEG compression.
+                imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(4096, 3072),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                                )
+                            )
+                            .build()
+                    )
+                    .build()
+
+                // For zoom-ratio lenses (zoomRatio != null), the selector is always
+                // DEFAULT_BACK_CAMERA — the logical multi-camera handles switching.
+                val selector = lensInfo?.selector ?: CameraSelector.DEFAULT_BACK_CAMERA
+
+                // Clear before unbind so any in-flight EV futures fail fast
+                camera = null
+                cameraProvider.unbindAll()
+
+                camera = cameraProvider.bindToLifecycle(
+                    lifecycleOwner, selector, preview, imageCapture!!,
                 )
-                .build()
 
-            val selector = lensInfo?.selector ?: CameraSelector.DEFAULT_BACK_CAMERA
-            cameraProvider.unbindAll()
-            camera = cameraProvider.bindToLifecycle(
-                lifecycleOwner, selector, preview, imageCapture!!,
-            )
-            camera!!.cameraInfo.exposureState
+                // Start tracking device orientation so targetRotation stays current.
+                // enable() is safe to call multiple times; a no-op if already enabled.
+                orientationListener.enable()
+
+                camera!!.cameraInfo.exposureState
+            }
         }
+        // runCatching inside withContext catches CancellationException.
+        // Re-throw it so bindJob cancellation propagates silently instead of showing an error.
+        result.exceptionOrNull()
+            ?.takeIf { it is kotlinx.coroutines.CancellationException }
+            ?.let { throw it }
+        return result
+    }
+
+    // ── Zoom ratio ────────────────────────────────────────────────────────────
+
+    suspend fun setZoomRatio(ratio: Float): Result<Unit> {
+        val result = runCatching {
+            val ctrl = camera?.cameraControl ?: error("Camera not bound")
+            suspendCancellableCoroutine { cont ->
+                val future = ctrl.setZoomRatio(ratio)
+                future.addListener({
+                    if (!cont.isActive) return@addListener
+                    try {
+                        future.get()
+                        cont.resume(Unit)
+                    } catch (e: Exception) {
+                        cont.resumeWithException(e)
+                    }
+                }, cameraExecutor)
+            }
+        }
+        result.exceptionOrNull()
+            ?.takeIf { it is kotlinx.coroutines.CancellationException }
+            ?.let { throw it }
+        return result
     }
 
     // ── Exposure compensation ─────────────────────────────────────────────────
@@ -135,14 +265,34 @@ class CameraManager @Inject constructor(
     fun getCurrentEvIndex(): Int =
         camera?.cameraInfo?.exposureState?.exposureCompensationIndex ?: 0
 
-    suspend fun setExposureCompensation(index: Int): Result<Int> =
-        runCatching {
+    suspend fun setExposureCompensation(index: Int): Result<Int> {
+        val result = runCatching {
             val ctrl = camera?.cameraControl ?: error("Camera not bound")
             suspendCancellableCoroutine { cont ->
                 val future = ctrl.setExposureCompensationIndex(index)
-                future.addListener({ cont.resume(future.get()) }, cameraExecutor)
+                future.addListener({
+                    if (!cont.isActive) return@addListener
+                    try {
+                        cont.resume(future.get())
+                    } catch (e: Exception) {
+                        cont.resumeWithException(e)
+                    }
+                }, cameraExecutor)
             }
         }
+        // runCatching catches CancellationException, breaking structured concurrency.
+        // Re-throw it so the caller's coroutine cancels silently instead of showing an error.
+        result.exceptionOrNull()
+            ?.takeIf { it is kotlinx.coroutines.CancellationException }
+            ?.let { throw it }
+        return result
+    }
+
+    // ── Flash ─────────────────────────────────────────────────────────────────
+
+    fun setFlashEnabled(enabled: Boolean) {
+        imageCapture?.flashMode = if (enabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
+    }
 
     // ── Capture ───────────────────────────────────────────────────────────────
 
@@ -194,6 +344,7 @@ class CameraManager @Inject constructor(
     }
 
     fun shutdown() {
+        orientationListener.disable()
         cameraExecutor.shutdown()
     }
 }
