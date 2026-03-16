@@ -100,6 +100,7 @@ class ViewfinderViewModel @Inject constructor(
                     totalShotsTaken = saved.totalShotsTaken,
                     favoriteFilmIds = saved.favoriteFilmIds,
                     flashEnabled = saved.flashEnabled,
+                    evIndex = saved.evIndex,
                 )
             }
         }
@@ -159,12 +160,22 @@ class ViewfinderViewModel @Inject constructor(
 
             cameraManager.bindToLifecycle(lifecycleOwner, previewView, lensToUse)
                 .onSuccess { exposureState ->
+                    // Keep the saved evIndex — the camera resets EV to 0 on every bind,
+                    // so reading exposureState.exposureCompensationIndex would overwrite
+                    // the user's saved value with 0 on every resume/lens-switch.
+                    val savedEvIndex = _uiState.value.evIndex
+                    val range = exposureState.exposureCompensationRange
+                    val clampedEvIndex = savedEvIndex.coerceIn(range.lower, range.upper)
                     _uiState.update {
                         it.copy(
-                            evIndex = exposureState.exposureCompensationIndex,
-                            evRange = exposureState.exposureCompensationRange,
+                            evIndex = clampedEvIndex,
+                            evRange = range,
                             evStep = exposureState.exposureCompensationStep.toDouble(),
                         )
+                    }
+                    // Re-apply saved EV to the newly-bound camera hardware.
+                    if (clampedEvIndex != 0) {
+                        cameraManager.setExposureCompensation(clampedEvIndex)
                     }
 
                     // Discover zoom-ratio lenses now that the camera is bound and
@@ -335,6 +346,14 @@ class ViewfinderViewModel @Inject constructor(
         val ratio = _uiState.value.selectedLens?.zoomRatio ?: return
         viewModelScope.launch {
             cameraManager.setZoomRatio(ratio)
+        }
+    }
+
+    fun reapplyEv() {
+        val index = _uiState.value.evIndex
+        if (index == 0) return
+        viewModelScope.launch {
+            cameraManager.setExposureCompensation(index)
         }
     }
 

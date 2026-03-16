@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -293,8 +294,8 @@ private fun FilmRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = CenterVertically,
     ) {
-        // Film canister icon
-        FilmCanisterIcon(color = film.accentColor)
+        // Film canister icon — brand/film-specific appearance
+        FilmCanisterIcon(film = film)
 
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -314,6 +315,16 @@ private fun FilmRow(
             )
         }
 
+        // Favorite star — large, left of ISO
+        Text(
+            text = if (isFavorite) "★" else "☆",
+            color = if (isFavorite) Color(0xFFFFD700) else Color(0xFF3A3A3A),
+            fontSize = 28.sp,
+            modifier = Modifier
+                .clickable(onClick = onToggleFavorite)
+                .padding(horizontal = 6.dp),
+        )
+
         // ISO badge
         Box(
             modifier = Modifier
@@ -330,18 +341,6 @@ private fun FilmRow(
         }
 
         Spacer(modifier = Modifier.width(6.dp))
-
-        // Favorite star
-        Text(
-            text = if (isFavorite) "★" else "☆",
-            color = if (isFavorite) Color(0xFFFFD700) else Color(0xFF383838),
-            fontSize = 20.sp,
-            modifier = Modifier
-                .clickable(onClick = onToggleFavorite)
-                .padding(horizontal = 4.dp),
-        )
-
-        Spacer(modifier = Modifier.width(4.dp))
 
         // LUT type badge
         val (lutBg, lutFg, lutLabel) = when (film.lutType) {
@@ -360,59 +359,222 @@ private fun FilmRow(
     }
 }
 
-// ── Film canister icon — Canvas-drawn 35mm canister ───────────────────────────
+// ── Canister style per film ────────────────────────────────────────────────────
+
+private data class CanisterStyle(
+    val bodyColor: Color,
+    val capColor: Color = Color(0xFF1C1C1C),
+    val stripeColor: Color? = null,
+)
+
+@Suppress("CyclomaticComplexMethod")
+private fun filmCanisterStyle(film: FilmStock): CanisterStyle = when (film.id) {
+
+    // ── Kodak ─────────────────────────────────────────────────────────────────
+    "kodak_kodachrome_25", "kodak_kodachrome_64", "kodak_kodachrome_200" ->
+        CanisterStyle(Color(0xFFCC2211), Color(0xFF1A1A1A), Color(0xFFFFD700))
+    "kodak_portra_160", "kodak_portra_400", "kodak_portra_400_nc",
+    "kodak_portra_400_uc", "kodak_portra_400_vc", "kodak_portra_800" ->
+        CanisterStyle(Color(0xFFD4AA7A), Color(0xFF1E1A14), Color(0xFF8B6030))
+    "kodak_ektar_100" ->
+        CanisterStyle(Color(0xFFCC1100), Color(0xFF1A1A1A), Color(0xFFFFCC00))
+    "kodak_gold_200" ->
+        CanisterStyle(Color(0xFFF5C800), Color(0xFF1A1A1A), Color(0xFFAA8800))
+    "kodak_ektachrome_100vs", "kodak_ektachrome_e100" ->
+        CanisterStyle(Color(0xFF1C4A8A), Color(0xFF0A1828), Color(0xFF5B9BD5))
+    "kodak_elite100_xpro", "kodak_elite_color200" ->
+        CanisterStyle(Color(0xFF553399), Color(0xFF1A1A1A), Color(0xFFAA66DD))
+    "kodak_tmax_100", "kodak_tmax_400", "kodak_tmax_3200" ->
+        CanisterStyle(Color(0xFF222222), Color(0xFF0A0A0A), Color(0xFFAAAAAA))
+    "kodak_trix_400" ->
+        CanisterStyle(Color(0xFFE8B800), Color(0xFF1A1A1A), Color(0xFF1A1A1A))
+    "kodak_ultramax_400" ->
+        CanisterStyle(Color(0xFF226622), Color(0xFF1A1A1A), Color(0xFFFFCC00))
+    "kodak_colorplus_200" ->
+        CanisterStyle(Color(0xFF448822), Color(0xFF1A1A1A), Color(0xFFEEEE00))
+
+    // ── Fujifilm ──────────────────────────────────────────────────────────────
+    "fuji_velvia_50" ->
+        CanisterStyle(Color(0xFFCC2200), Color(0xFF1A1A1A), Color(0xFFFF8800))
+    "fuji_provia_100f" ->
+        CanisterStyle(Color(0xFF00826A), Color(0xFF0A2220), Color(0xFF00DDAA))
+    "fuji_superia_100", "fuji_superia_200", "fuji_superia_400",
+    "fuji_superia_800", "fuji_superia_1600" ->
+        CanisterStyle(Color(0xFF00A550), Color(0xFF0A2418), Color(0xFFEEEEEE))
+    "fuji_superia_200_xpro" ->
+        CanisterStyle(Color(0xFF009944), Color(0xFF1A1A1A), Color(0xFFFF5500))
+    "fuji_acros_100" ->
+        CanisterStyle(Color(0xFF1A1A1A), Color(0xFF080808), Color(0xFFCCCCCC))
+    "fuji_neopan_400", "fuji_neopan_1600" ->
+        CanisterStyle(Color(0xFF222222), Color(0xFF0A0A0A), Color(0xFFDDDDDD))
+    "fuji_160c" ->
+        CanisterStyle(Color(0xFF228890), Color(0xFF0A2224), Color(0xFFAADDEE))
+    "fuji_pro400h" ->
+        CanisterStyle(Color(0xFF006644), Color(0xFF0A2018), Color(0xFF88DDBB))
+    "fuji_800z" ->
+        CanisterStyle(Color(0xFF005533), Color(0xFF0A1810), Color(0xFF66CC88))
+    "fuji_natura_1600" ->
+        CanisterStyle(Color(0xFFEEEEDD), Color(0xFF2A2A2A), Color(0xFF009944))
+
+    // ── Ilford ────────────────────────────────────────────────────────────────
+    "ilford_panf_50", "ilford_fp4", "ilford_hp5", "ilford_xp2", "ilford_hps_800" ->
+        CanisterStyle(Color(0xFFE8B800), Color(0xFF1A1A1A), Color(0xFF1A1A1A))
+    "ilford_delta_100", "ilford_delta_400", "ilford_delta_3200" ->
+        CanisterStyle(Color(0xFF111111), Color(0xFF050505), Color(0xFF888888))
+    "ilford_sfx_200" ->
+        CanisterStyle(Color(0xFF881111), Color(0xFF1A1A1A), Color(0xFFDDDDDD))
+
+    // ── Lomography ────────────────────────────────────────────────────────────
+    "lomo_xpro", "lomo_xpro_slide_200" ->
+        CanisterStyle(Color(0xFFDD3311), Color(0xFF1A1A1A), Color(0xFF11AADD))
+    "lomo_redscale_xr" ->
+        CanisterStyle(Color(0xFFCC2200), Color(0xFF1A1A1A), Color(0xFFFF8800))
+    "lomo_chrome_metropolis" ->
+        CanisterStyle(Color(0xFF3A4A5A), Color(0xFF1A1A1A), Color(0xFF88AACC))
+    "lomo_chrome_purple" ->
+        CanisterStyle(Color(0xFF6633AA), Color(0xFF1A1A1A), Color(0xFFCC88FF))
+
+    // ── CineStill ─────────────────────────────────────────────────────────────
+    "cinestill_50d" ->
+        CanisterStyle(Color(0xFF1155BB), Color(0xFF0A1833), Color(0xFF88AADD))
+    "cinestill_800t" ->
+        CanisterStyle(Color(0xFFE84000), Color(0xFF1A1A1A), Color(0xFF111111))
+
+    // ── Agfa ──────────────────────────────────────────────────────────────────
+    "agfa_apx_100" ->
+        CanisterStyle(Color(0xFF444444), Color(0xFF0A0A0A), Color(0xFFCCCCCC))
+    "agfa_precisa_100" ->
+        CanisterStyle(Color(0xFF445566), Color(0xFF1A1A2A), Color(0xFF99BBDD))
+    "agfa_ultra_color_100" ->
+        CanisterStyle(Color(0xFFDD4400), Color(0xFF1A1A1A), Color(0xFFFFAA00))
+    "agfa_vista_200" ->
+        CanisterStyle(Color(0xFFEE5500), Color(0xFF1A1A1A), Color(0xFFFFCC00))
+
+    // ── Rollei ────────────────────────────────────────────────────────────────
+    "rollei_retro_80s", "rollei_retro_100", "rollei_ortho_25" ->
+        CanisterStyle(Color(0xFFAA1111), Color(0xFF1A1A1A), Color(0xFFDDDDDD))
+    "rollei_ir_400" ->
+        CanisterStyle(Color(0xFF880000), Color(0xFF0A0A0A), Color(0xFF441111))
+
+    // ── Polaroid ──────────────────────────────────────────────────────────────
+    "polaroid_669", "polaroid_690", "polaroid_px100uv_cold", "polaroid_timezero_expired",
+    "polaroid_672", "polaroid_px680", "polaroid_px70", "polaroid_667", "polaroid_665" ->
+        CanisterStyle(Color(0xFFEEEEEE), Color(0xFF222222), Color(0xFF333333))
+
+    // Fallback — use film's own accent color
+    else -> CanisterStyle(
+        bodyColor = film.accentColor,
+        capColor = Color(0xFF1C1C1C),
+        stripeColor = Color.White.copy(alpha = 0.35f),
+    )
+}
+
+// ── Film canister icon — brand/film authentic appearance ──────────────────────
 
 @Composable
-private fun FilmCanisterIcon(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(width = 24.dp, height = 38.dp)) {
+private fun FilmCanisterIcon(film: FilmStock, modifier: Modifier = Modifier) {
+    val style = filmCanisterStyle(film)
+    Canvas(modifier = modifier.size(width = 30.dp, height = 46.dp)) {
         val w = size.width
         val h = size.height
-        val capW = w * 0.55f
-        val capH = h * 0.16f
-        val tongueW = capW * 0.35f
-        val tongueH = capH * 0.7f
-        val bodyCorner = CornerRadius(3.dp.toPx())
 
-        // Film tongue (tiny protrusion above cap)
+        // ── Film tongue (leader exiting from top center) ───────────────────────
+        val tongueW = w * 0.30f
+        val tongueH = h * 0.11f
         drawRoundRect(
-            color = color.copy(alpha = 0.45f),
+            color = style.bodyColor.copy(alpha = 0.75f),
             topLeft = Offset((w - tongueW) / 2f, 0f),
-            size = Size(tongueW, tongueH),
-            cornerRadius = CornerRadius(1.5f.dp.toPx()),
+            size = Size(tongueW, tongueH + 2.dp.toPx()),
+            cornerRadius = CornerRadius(1.dp.toPx()),
         )
 
-        // Cap (slightly wider, darker)
+        // ── Top cap ───────────────────────────────────────────────────────────
+        val topCapTop = tongueH * 0.35f
+        val topCapH = h * 0.155f
         drawRoundRect(
-            color = color.copy(alpha = 0.65f),
-            topLeft = Offset((w - capW) / 2f, tongueH * 0.6f),
-            size = Size(capW, capH),
-            cornerRadius = CornerRadius(2.dp.toPx()),
+            color = style.capColor,
+            topLeft = Offset(0f, topCapTop),
+            size = Size(w, topCapH + 2.dp.toPx()),
+            cornerRadius = CornerRadius(3.dp.toPx()),
+        )
+        // Top cap specular highlight
+        drawRect(
+            color = Color.White.copy(alpha = 0.13f),
+            topLeft = Offset(w * 0.08f, topCapTop + topCapH * 0.15f),
+            size = Size(w * 0.84f, topCapH * 0.38f),
         )
 
-        // Body (full width, rounded)
-        val bodyTop = tongueH * 0.6f + capH * 0.7f
-        val bodyH = h - bodyTop
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(0f, bodyTop),
+        // ── Body ──────────────────────────────────────────────────────────────
+        val bodyStartY = topCapTop + topCapH * 0.88f
+        val bottomCapH = h * 0.135f
+        val bodyEndY = h - bottomCapH * 0.88f
+        val bodyH = bodyEndY - bodyStartY
+
+        // Body base color
+        drawRect(
+            color = style.bodyColor,
+            topLeft = Offset(0f, bodyStartY),
             size = Size(w, bodyH),
-            cornerRadius = bodyCorner,
         )
 
-        // Highlight stripe (left side gloss effect)
-        drawRoundRect(
-            color = Color.White.copy(alpha = 0.18f),
-            topLeft = Offset(w * 0.12f, bodyTop + bodyH * 0.12f),
-            size = Size(w * 0.14f, bodyH * 0.65f),
-            cornerRadius = CornerRadius(2.dp.toPx()),
+        // Left cylindrical highlight
+        drawRect(
+            brush = Brush.horizontalGradient(
+                colors = listOf(Color.White.copy(alpha = 0.32f), Color.Transparent),
+                startX = 0f,
+                endX = w * 0.38f,
+            ),
+            topLeft = Offset(0f, bodyStartY),
+            size = Size(w * 0.38f, bodyH),
         )
 
-        // Shadow stripe on right
+        // Right cylindrical shadow
+        drawRect(
+            brush = Brush.horizontalGradient(
+                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.38f)),
+                startX = w * 0.55f,
+                endX = w,
+            ),
+            topLeft = Offset(w * 0.55f, bodyStartY),
+            size = Size(w * 0.45f, bodyH),
+        )
+
+        // Horizontal accent stripe (centered in body — like a label band)
+        style.stripeColor?.let { stripe ->
+            val stripeY = bodyStartY + bodyH * 0.44f
+            val stripeThickness = 2.8.dp.toPx()
+            drawRect(
+                color = stripe.copy(alpha = 0.82f),
+                topLeft = Offset(0f, stripeY),
+                size = Size(w, stripeThickness),
+            )
+        }
+
+        // ── Bottom cap ────────────────────────────────────────────────────────
+        val botCapTop = h - bottomCapH - 0.5.dp.toPx()
         drawRoundRect(
-            color = Color.Black.copy(alpha = 0.2f),
-            topLeft = Offset(w * 0.74f, bodyTop + bodyH * 0.08f),
-            size = Size(w * 0.14f, bodyH * 0.7f),
-            cornerRadius = CornerRadius(2.dp.toPx()),
+            color = style.capColor,
+            topLeft = Offset(0f, botCapTop - 2.dp.toPx()),
+            size = Size(w, bottomCapH + 2.dp.toPx()),
+            cornerRadius = CornerRadius(3.dp.toPx()),
+        )
+        // Bottom cap specular highlight
+        drawRect(
+            color = Color.White.copy(alpha = 0.10f),
+            topLeft = Offset(w * 0.08f, botCapTop + bottomCapH * 0.20f),
+            size = Size(w * 0.84f, bottomCapH * 0.30f),
+        )
+
+        // ── Cap-body edge lines (seam detail) ─────────────────────────────────
+        drawRect(
+            color = Color.Black.copy(alpha = 0.35f),
+            topLeft = Offset(0f, bodyStartY - 0.5.dp.toPx()),
+            size = Size(w, 1.dp.toPx()),
+        )
+        drawRect(
+            color = Color.Black.copy(alpha = 0.35f),
+            topLeft = Offset(0f, bodyEndY - 0.5.dp.toPx()),
+            size = Size(w, 1.dp.toPx()),
         )
     }
 }

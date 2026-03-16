@@ -135,6 +135,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.reapplyZoom()
+                viewModel.reapplyEv()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

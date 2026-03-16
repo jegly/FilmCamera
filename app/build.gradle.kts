@@ -14,8 +14,8 @@ android {
         applicationId = "com.photoncam"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.0.1"
+        versionCode = 7
+        versionName = "1.0.2-alpha1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
