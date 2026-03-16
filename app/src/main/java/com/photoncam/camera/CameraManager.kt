@@ -13,6 +13,8 @@ import androidx.camera.camera2.interop.CaptureRequestOptions
 import android.hardware.camera2.CaptureRequest
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.MeteringPoint
 import androidx.camera.core.ExposureState
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -33,6 +35,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -361,6 +364,29 @@ class CameraManager @Inject constructor(
         val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val dir = File(context.cacheDir, "captures").apply { mkdirs() }
         return File(dir, "RAW_$ts.jpg")
+    }
+
+    // ── Tap-to-focus ──────────────────────────────────────────────────────────
+
+    suspend fun tapToFocus(meteringPoint: MeteringPoint): Result<Unit> {
+        val result = runCatching {
+            val ctrl = camera?.cameraControl ?: error("Camera not bound")
+            val action = FocusMeteringAction.Builder(meteringPoint)
+                .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                .build()
+            suspendCancellableCoroutine { cont ->
+                val future = ctrl.startFocusAndMetering(action)
+                future.addListener({
+                    if (!cont.isActive) return@addListener
+                    try { future.get(); cont.resume(Unit) }
+                    catch (e: Exception) { cont.resumeWithException(e) }
+                }, cameraExecutor)
+            }
+        }
+        result.exceptionOrNull()
+            ?.takeIf { it is kotlinx.coroutines.CancellationException }
+            ?.let { throw it }
+        return result
     }
 
     fun shutdown() {

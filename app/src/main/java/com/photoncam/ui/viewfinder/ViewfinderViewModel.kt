@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import androidx.camera.core.MeteringPointFactory
 import com.photoncam.camera.CameraManager
 import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
@@ -36,6 +37,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+
+/** Tap-to-focus indicator state. [focused] flips to true once AF converges. */
+data class FocusPoint(val x: Float, val y: Float, val focused: Boolean = false)
 
 data class ViewfinderUiState(
     val selectedFilm: FilmStock = FilmCatalog.default,
@@ -67,6 +71,7 @@ data class ViewfinderUiState(
     val evRange: Range<Int>? = null,
     val evStep: Double = 1.0,
     val mainZoomRatio: Float = 1.0f,
+    val focusPoint: FocusPoint? = null,
 )
 
 @HiltViewModel
@@ -83,6 +88,7 @@ class ViewfinderViewModel @Inject constructor(
     private var evJob: Job? = null
     private var bindJob: Job? = null
     private var zoomJob: Job? = null
+    private var focusJob: Job? = null
     private var savedLensId: String? = null
 
     // Track work IDs we've already reported to the UI to avoid duplicate updates.
@@ -451,6 +457,21 @@ class ViewfinderViewModel @Inject constructor(
         if (index == 0) return
         viewModelScope.launch {
             cameraManager.setExposureCompensation(index)
+        }
+    }
+
+    fun tapToFocus(x: Float, y: Float, factory: MeteringPointFactory) {
+        val meteringPoint = factory.createPoint(x, y)
+        focusJob?.cancel()
+        _uiState.update { it.copy(focusPoint = FocusPoint(x, y, focused = false)) }
+        focusJob = viewModelScope.launch {
+            cameraManager.tapToFocus(meteringPoint)
+                .onSuccess {
+                    _uiState.update { s -> s.copy(focusPoint = s.focusPoint?.copy(focused = true)) }
+                }
+                // Success or failure: hold indicator briefly then clear
+            delay(1500)
+            _uiState.update { it.copy(focusPoint = null) }
         }
     }
 

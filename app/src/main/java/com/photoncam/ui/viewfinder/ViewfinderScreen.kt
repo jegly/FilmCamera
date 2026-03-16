@@ -3,6 +3,8 @@ package com.photoncam.ui.viewfinder
 import android.content.Intent
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -44,12 +46,16 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import android.app.Activity
@@ -225,6 +231,9 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                             uiState = uiState,
                             previewView = previewView,
                             cameraGranted = cameraPermission.status.isGranted,
+                            onTap = { x, y ->
+                                viewModel.tapToFocus(x, y, previewView.meteringPointFactory)
+                            },
                         )
                     }
 
@@ -418,6 +427,7 @@ private fun ViewfinderWindow(
     uiState: ViewfinderUiState,
     previewView: PreviewView,
     cameraGranted: Boolean,
+    onTap: (x: Float, y: Float) -> Unit,
 ) {
     // Outer chrome bezel
     Box(
@@ -444,7 +454,10 @@ private fun ViewfinderWindow(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color.Black),
+                    .background(Color.Black)
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset -> onTap(offset.x, offset.y) }
+                    },
             ) {
                 if (cameraGranted) {
                     AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
@@ -495,8 +508,55 @@ private fun ViewfinderWindow(
                         )
                     }
                 }
+
+                // Tap-to-focus indicator
+                var lastFocusPoint by remember { mutableStateOf<FocusPoint?>(null) }
+                uiState.focusPoint?.let { lastFocusPoint = it }
+                AnimatedVisibility(
+                    visible = uiState.focusPoint != null,
+                    enter = fadeIn(tween(80)),
+                    exit = fadeOut(tween(350)),
+                ) {
+                    lastFocusPoint?.let { point ->
+                        FocusBox(point = point, accentColor = uiState.selectedFilm.accentColor)
+                    }
+                }
             }
         }
+    }
+}
+
+// ── Tap-to-focus box ──────────────────────────────────────────────────────────
+
+@Composable
+private fun FocusBox(point: FocusPoint, accentColor: Color) {
+    // Scale in from 1.5× to 1× on each new tap position
+    val scale = remember(point.x, point.y) { Animatable(1.5f) }
+    LaunchedEffect(point.x, point.y) {
+        scale.animateTo(1.0f, animationSpec = tween(200))
+    }
+    // Turn white once AF converges
+    val color by animateColorAsState(
+        targetValue = if (point.focused) Color.White else accentColor,
+        animationSpec = tween(150),
+        label = "focusColor",
+    )
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val cx = point.x
+        val cy = point.y
+        val half = 30.dp.toPx() * scale.value
+        val arm  = half * 0.36f
+        val sw   = 1.8.dp.toPx()
+
+        // Four corner brackets (two lines each)
+        fun corner(ox: Float, oy: Float, dx: Float, dy: Float) {
+            drawLine(color, Offset(cx + ox, cy + oy), Offset(cx + ox + dx, cy + oy), sw)
+            drawLine(color, Offset(cx + ox, cy + oy), Offset(cx + ox, cy + oy + dy), sw)
+        }
+        corner(-half, -half,  arm,  arm)   // top-left
+        corner( half, -half, -arm,  arm)   // top-right
+        corner(-half,  half,  arm, -arm)   // bottom-left
+        corner( half,  half, -arm, -arm)   // bottom-right
     }
 }
 
