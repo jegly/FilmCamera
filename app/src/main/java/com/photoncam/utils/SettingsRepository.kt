@@ -3,6 +3,7 @@ package com.photoncam.utils
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -38,6 +39,7 @@ data class AppSettings(
     val totalShotsTaken: Int = 0,
     val favoriteFilmIds: Set<String> = emptySet(),
     val flashEnabled: Boolean = false,
+    val mainZoomRatio: Float = 1.0f,
 )
 
 @Singleton
@@ -62,6 +64,7 @@ class SettingsRepository @Inject constructor(
         val totalShotsTaken = intPreferencesKey("total_shots_taken")
         val favoriteFilmIds = stringPreferencesKey("favorite_film_ids")
         val flashEnabled = booleanPreferencesKey("flash_enabled")
+        val mainZoomRatio = floatPreferencesKey("main_zoom_ratio")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -94,6 +97,7 @@ class SettingsRepository @Inject constructor(
             favoriteFilmIds = prefs[Keys.favoriteFilmIds]
                 ?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
             flashEnabled = prefs[Keys.flashEnabled] ?: false,
+            mainZoomRatio = prefs[Keys.mainZoomRatio] ?: 1.0f,
         )
     }
 
@@ -120,6 +124,7 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.totalShotsTaken] = settings.totalShotsTaken
             prefs[Keys.favoriteFilmIds] = settings.favoriteFilmIds.joinToString(",")
             prefs[Keys.flashEnabled] = settings.flashEnabled
+            prefs[Keys.mainZoomRatio] = settings.mainZoomRatio
         }
     }
 }

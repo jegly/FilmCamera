@@ -37,6 +37,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -289,6 +291,16 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                         accentColor = uiState.selectedFilm.accentColor,
                         onSelect = viewModel::selectLens,
                     )
+
+                    // Zoom slider — visible only on the 1× lens
+                    if (uiState.selectedLens?.id == "zoom_main") {
+                        ZoomSliderRow(
+                            zoomRatio = uiState.mainZoomRatio,
+                            accentColor = uiState.selectedFilm.accentColor,
+                            onZoomChange = viewModel::setMainZoomRatio,
+                            onZoomChangeFinished = viewModel::commitMainZoomRatio,
+                        )
+                    }
 
                     Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(SepLine))
 
@@ -562,6 +574,56 @@ private fun LcdCell(label: String, value: String, valueColor: Color = AmberLcd) 
             fontSize = 6.sp, letterSpacing = 1.sp)
         Text(value, color = valueColor, fontFamily = FontFamily.Monospace,
             fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+    }
+}
+
+// ── Zoom slider (1× lens only) ────────────────────────────────────────────────
+
+@Composable
+private fun ZoomSliderRow(
+    zoomRatio: Float,
+    accentColor: Color,
+    onZoomChange: (Float) -> Unit,
+    onZoomChangeFinished: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "ZOOM",
+                color = Color(0xFF555555),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 8.sp,
+                letterSpacing = 1.sp,
+            )
+            Text(
+                text = "${"%.1f".format(zoomRatio)}×",
+                color = accentColor,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Slider(
+            value = zoomRatio,
+            onValueChange = onZoomChange,
+            onValueChangeFinished = onZoomChangeFinished,
+            valueRange = 1f..8f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(24.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = accentColor,
+                activeTrackColor = accentColor.copy(alpha = 0.8f),
+                inactiveTrackColor = Color(0xFF333333),
+            ),
+        )
     }
 }
 

@@ -66,6 +66,7 @@ data class ViewfinderUiState(
     val evIndex: Int = 0,
     val evRange: Range<Int>? = null,
     val evStep: Double = 1.0,
+    val mainZoomRatio: Float = 1.0f,
 )
 
 @HiltViewModel
@@ -108,6 +109,7 @@ class ViewfinderViewModel @Inject constructor(
                     favoriteFilmIds = saved.favoriteFilmIds,
                     flashEnabled = saved.flashEnabled,
                     evIndex = saved.evIndex,
+                    mainZoomRatio = saved.mainZoomRatio,
                 )
             }
         }
@@ -172,6 +174,7 @@ class ViewfinderViewModel @Inject constructor(
                     totalShotsTaken = state.totalShotsTaken,
                     favoriteFilmIds = state.favoriteFilmIds,
                     flashEnabled = state.flashEnabled,
+                    mainZoomRatio = state.mainZoomRatio,
                 )
             )
         }
@@ -235,18 +238,15 @@ class ViewfinderViewModel @Inject constructor(
                                     selectedLens = s.selectedLens ?: default,
                                 )
                             }
-                            // Apply saved zoom ratio (e.g. user had ultrawide selected last session)
-                            _uiState.value.selectedLens?.zoomRatio?.let { ratio ->
-                                cameraManager.setZoomRatio(ratio)
-                            }
+                            // Apply zoom — for zoom_main, honour the slider (mainZoomRatio);
+                            // for other lenses, apply the lens zoom ratio.
+                            cameraManager.setZoomRatio(effectiveZoomRatio())
                         }
                     } else {
                         // Re-binding after a full rebind (e.g. switching back from front camera):
                         // re-apply the zoom ratio for the selected lens so the preview matches
                         // the highlighted pill in the lens selector.
-                        _uiState.value.selectedLens?.zoomRatio?.let { ratio ->
-                            cameraManager.setZoomRatio(ratio)
-                        }
+                        cameraManager.setZoomRatio(effectiveZoomRatio())
                     }
 
                     // Re-apply hardware flash mode after each bind (ImageCapture is recreated).
@@ -262,9 +262,33 @@ class ViewfinderViewModel @Inject constructor(
         }
     }
 
+    /** Effective zoom ratio to apply to the camera for the current lens selection. */
+    private fun effectiveZoomRatio(): Float {
+        val state = _uiState.value
+        return if (state.selectedLens?.id == "zoom_main") state.mainZoomRatio
+               else state.selectedLens?.zoomRatio ?: 1.0f
+    }
+
+    /** Called while the slider is dragged — updates live zoom, no persist. */
+    fun setMainZoomRatio(ratio: Float) {
+        val clamped = ratio.coerceIn(1.0f, 8.0f)
+        _uiState.update { it.copy(mainZoomRatio = clamped) }
+        viewModelScope.launch {
+            cameraManager.setZoomRatio(clamped)
+                .onFailure { e -> _uiState.update { it.copy(error = "Zoom failed: ${e.message}") } }
+        }
+    }
+
+    /** Called when the user releases the slider — persists the value. */
+    fun commitMainZoomRatio() {
+        persistSettings()
+    }
+
     fun selectLens(lens: LensInfo) {
         if (_uiState.value.selectedLens?.id == lens.id) return
-        _uiState.update { it.copy(selectedLens = lens) }
+        // Returning to 1× resets the zoom slider to 1× (per spec)
+        val newZoom = if (lens.id == "zoom_main") 1.0f else _uiState.value.mainZoomRatio
+        _uiState.update { it.copy(selectedLens = lens, mainZoomRatio = newZoom) }
         persistSettings()
         // Zoom-ratio lenses: the LaunchedEffect(selectedLens?.id) in ViewfinderScreen
         // calls bindCamera(), which detects isBound + zoomRatio != null and routes to
@@ -400,7 +424,7 @@ class ViewfinderViewModel @Inject constructor(
     }
 
     fun reapplyZoom() {
-        val ratio = _uiState.value.selectedLens?.zoomRatio ?: return
+        val ratio = effectiveZoomRatio()
         viewModelScope.launch {
             cameraManager.setZoomRatio(ratio)
         }
