@@ -85,7 +85,8 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.photoncam.camera.CameraParams
 import com.photoncam.camera.LensInfo
 import kotlin.math.abs
-import kotlin.math.roundToInt
+import kotlin.math.cos
+import kotlin.math.sin
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
 import com.photoncam.processing.DateImprintColor
@@ -1488,48 +1489,55 @@ private fun CameraParamsOverlay(params: CameraParams, modifier: Modifier = Modif
 
 @Composable
 private fun LevelOverlay(angle: Float, modifier: Modifier = Modifier) {
-    // angle = atan2(gx, gy): 0° = portrait upright, ±90° = landscape, ±180° = upside-down
-    // Deviation from the nearest cardinal orientation (0, ±90, ±180°)
-    val nearestCardinal = (angle / 90f).roundToInt() * 90f
-    val deviation = angle - nearestCardinal          // -45° … +45°
-    val isLocked = abs(deviation) < 2f
+    // angle = atan2(gx, gy): 0° = portrait upright, +90° = landscape CW
+    // The bar draws at -angle so it counter-rotates and stays parallel to the ground
+    val mod90 = abs(angle % 90f)
+    val isLocked = mod90 < 2f || mod90 > 88f
 
     val color by animateColorAsState(
         targetValue = if (isLocked) Color(0xFF4CAF50) else Color(0xCCFFFFFF),
         animationSpec = tween(200),
         label = "levelColor",
     )
-    // Smooth bubble movement
-    val bubbleNorm by animateFloatAsState(
-        targetValue = (deviation / 30f).coerceIn(-1f, 1f),
-        animationSpec = tween(80),
-        label = "levelBubble",
-    )
 
-    // The bar is always drawn horizontally (never rotates)
     Canvas(modifier = modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val barHalf  = 64.dp.toPx()
-        val strokeW  = 1.5.dp.toPx()
-        val bubbleR  = 4.5.dp.toPx()
-        val tickH    = 7.dp.toPx()
-        val bubbleCx = cx + bubbleNorm * barHalf
+        val halfLen = 70.dp.toPx()
+        val gap     = 10.dp.toPx()
+        val strokeW = 1.5.dp.toPx()
+        val tickLen = 6.dp.toPx()
+        val dotR    = 3.dp.toPx()
 
-        // End ticks
-        drawLine(color, Offset(cx - barHalf, cy - tickH / 2), Offset(cx - barHalf, cy + tickH / 2), strokeW)
-        drawLine(color, Offset(cx + barHalf, cy - tickH / 2), Offset(cx + barHalf, cy + tickH / 2), strokeW)
+        // Negate the device tilt so the bar stays aligned with the real-world horizon
+        val rad  = Math.toRadians((-angle).toDouble())
+        val cosA = cos(rad).toFloat()
+        val sinA = sin(rad).toFloat()
 
-        // Centre target tick (dimmer)
-        drawLine(color.copy(alpha = 0.45f), Offset(cx, cy - tickH), Offset(cx, cy + tickH), strokeW)
-
-        // Bar split around the bubble
-        val gap = bubbleR + 3.dp.toPx()
-        drawLine(color, Offset(cx - barHalf, cy), Offset(bubbleCx - gap, cy), strokeW)
-        drawLine(color, Offset(bubbleCx + gap, cy), Offset(cx + barHalf, cy), strokeW)
-
-        // Bubble
-        drawCircle(color, bubbleR, Offset(bubbleCx, cy))
+        // Left arm
+        drawLine(color,
+            start = Offset(cx - halfLen * cosA, cy - halfLen * sinA),
+            end   = Offset(cx - gap * cosA,     cy - gap * sinA),
+            strokeWidth = strokeW,
+        )
+        // Right arm
+        drawLine(color,
+            start = Offset(cx + gap * cosA,     cy + gap * sinA),
+            end   = Offset(cx + halfLen * cosA, cy + halfLen * sinA),
+            strokeWidth = strokeW,
+        )
+        // End ticks (perpendicular to the bar)
+        listOf(-1f, 1f).forEach { side ->
+            val tx = cx + side * halfLen * cosA
+            val ty = cy + side * halfLen * sinA
+            drawLine(color,
+                start = Offset(tx - tickLen * sinA / 2, ty + tickLen * cosA / 2),
+                end   = Offset(tx + tickLen * sinA / 2, ty - tickLen * cosA / 2),
+                strokeWidth = strokeW,
+            )
+        }
+        // Centre dot
+        drawCircle(color, radius = dotR, center = Offset(cx, cy))
     }
 }
 
