@@ -836,71 +836,87 @@ private fun LensSelectorRow(
     }
 }
 
-// ── Film canister mini-preview ────────────────────────────────────────────────
+// ── Film canister porthole (top-down interior view) ───────────────────────────
 
 @Composable
-private fun FilmCanisterMini(film: FilmStock, modifier: Modifier = Modifier) {
+private fun FilmCanisterWindow(film: FilmStock, modifier: Modifier = Modifier) {
     val accent = film.accentColor
     Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val cr = 2.dp.toPx()
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val rx = size.width / 2f
+        val ry = size.height / 2f
 
-        // Body
-        val bL = w * 0.12f; val bR = w * 0.88f
-        val bT = h * 0.28f; val bB = h * 0.94f
-        drawRoundRect(
-            color = accent.copy(alpha = 0.20f),
-            topLeft = Offset(bL, bT),
-            size = Size(bR - bL, bB - bT),
-            cornerRadius = CornerRadius(cr),
+        // ── Interior: dark canister inside ──────────────────────────────────
+        drawOval(
+            color = Color(0xFF0E0E0E),
+            topLeft = Offset(0f, 0f),
+            size = Size(size.width, size.height),
         )
-        drawRoundRect(
-            color = accent.copy(alpha = 0.55f),
-            topLeft = Offset(bL, bT),
-            size = Size(bR - bL, bB - bT),
-            cornerRadius = CornerRadius(cr),
-            style = Stroke(width = 0.8.dp.toPx()),
+
+        // ── Film roll layers (concentric ovals, accent-tinted) ───────────────
+        val layers = listOf(
+            0.88f to 0.18f,  // outermost film roll edge
+            0.74f to 0.22f,
+            0.60f to 0.20f,
+            0.46f to 0.18f,
         )
-        // Narrow label band (accent fill)
-        val bandT = bT + (bB - bT) * 0.25f
-        val bandB = bT + (bB - bT) * 0.65f
-        drawRect(
-            color = accent.copy(alpha = 0.30f),
-            topLeft = Offset(bL + 1f, bandT),
-            size = Size(bR - bL - 2f, bandB - bandT),
-        )
-        // Vertical stripe detail
-        for (i in listOf(0.35f, 0.65f)) {
-            drawLine(
-                color = accent.copy(alpha = 0.15f),
-                start = Offset(bL + (bR - bL) * i, bT + 2.dp.toPx()),
-                end = Offset(bL + (bR - bL) * i, bB - 2.dp.toPx()),
-                strokeWidth = 0.5.dp.toPx(),
+        for ((scale, alpha) in layers) {
+            drawOval(
+                color = accent.copy(alpha = alpha),
+                topLeft = Offset(cx - rx * scale, cy - ry * scale),
+                size = Size(rx * scale * 2f, ry * scale * 2f),
+            )
+            drawOval(
+                color = accent.copy(alpha = alpha * 1.8f),
+                topLeft = Offset(cx - rx * scale, cy - ry * scale),
+                size = Size(rx * scale * 2f, ry * scale * 2f),
+                style = Stroke(width = 0.7.dp.toPx()),
             )
         }
-        // Top cap
-        val cW = (bR - bL) * 0.62f
-        val cL = (w - cW) / 2f
-        drawRoundRect(
-            color = Color(0xFF252525),
-            topLeft = Offset(cL, h * 0.06f),
-            size = Size(cW, bT - h * 0.06f + 1f),
-            cornerRadius = CornerRadius(cr * 0.5f),
+
+        // ── Spool hub (dark center disk) ────────────────────────────────────
+        val hubRx = rx * 0.28f
+        val hubRy = ry * 0.28f
+        drawOval(
+            color = Color(0xFF1A1A1A),
+            topLeft = Offset(cx - hubRx, cy - hubRy),
+            size = Size(hubRx * 2f, hubRy * 2f),
         )
-        drawRoundRect(
-            color = accent.copy(alpha = 0.35f),
-            topLeft = Offset(cL, h * 0.06f),
-            size = Size(cW, bT - h * 0.06f + 1f),
-            cornerRadius = CornerRadius(cr * 0.5f),
-            style = Stroke(width = 0.6.dp.toPx()),
+        // Hub spokes (4 radial lines)
+        for (i in 0 until 4) {
+            val angle = Math.toRadians(i * 45.0)
+            drawLine(
+                color = accent.copy(alpha = 0.30f),
+                start = Offset(cx, cy),
+                end = Offset(cx + (hubRx * cos(angle)).toFloat(), cy + (hubRy * sin(angle)).toFloat()),
+                strokeWidth = 0.6.dp.toPx(),
+            )
+        }
+        // Hub center dot
+        drawCircle(
+            color = Color(0xFF2A2A2A),
+            radius = rx * 0.09f,
+            center = Offset(cx, cy),
         )
-        // Leader slot
-        drawLine(
-            color = Color(0xFF0D0D0D),
-            start = Offset(w * 0.33f, bT + 1.5.dp.toPx()),
-            end = Offset(w * 0.67f, bT + 1.5.dp.toPx()),
-            strokeWidth = 1.5.dp.toPx(),
+
+        // ── Oval bezel (canister wall ring) ─────────────────────────────────
+        drawOval(
+            color = accent.copy(alpha = 0.55f),
+            topLeft = Offset(0f, 0f),
+            size = Size(size.width, size.height),
+            style = Stroke(width = 1.5.dp.toPx()),
+        )
+
+        // ── Glass reflection highlight (top-left arc) ───────────────────────
+        drawArc(
+            color = Color.White.copy(alpha = 0.18f),
+            startAngle = 200f,
+            sweepAngle = 70f,
+            useCenter = false,
+            topLeft = Offset(rx * 0.12f, ry * 0.08f),
+            size = Size(rx * 1.1f, ry * 0.9f),
+            style = Stroke(width = 1.8.dp.toPx()),
         )
     }
 }
@@ -929,14 +945,9 @@ private fun FilmButton(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            FilmCanisterMini(
-                film = film,
-                modifier = Modifier
-                    .width(18.dp)
-                    .height(26.dp),
-            )
             Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = film.brand.displayName.uppercase(),
@@ -955,6 +966,12 @@ private fun FilmButton(
                     letterSpacing = 0.3.sp,
                 )
             }
+            FilmCanisterWindow(
+                film = film,
+                modifier = Modifier
+                    .width(30.dp)
+                    .height(22.dp),
+            )
         }
     }
 }
