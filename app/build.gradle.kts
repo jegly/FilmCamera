@@ -17,8 +17,8 @@ android {
         applicationId = "com.photoncam"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.1.0"
+        versionCode = 17
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "BUILD_DATE", "\"${SimpleDateFormat("yyyy-MM-dd").format(Date())}\"")
