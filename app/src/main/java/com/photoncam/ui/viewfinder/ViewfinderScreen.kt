@@ -82,6 +82,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.photoncam.camera.CameraParams
 import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
@@ -386,6 +387,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onToggleLightLeak = viewModel::toggleLightLeak,
                 onDateMenuTap = viewModel::toggleDateImprintMenu,
                 onToggleHistogram = viewModel::toggleHistogram,
+                onToggleCameraParams = viewModel::toggleCameraParams,
                 onSave = viewModel::saveAndCloseSettings,
             )
         }
@@ -551,6 +553,18 @@ private fun ViewfinderWindow(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
                                 .padding(6.dp),
+                        )
+                    }
+                }
+
+                // Camera parameters overlay — bottom-center
+                if (uiState.cameraParamsEnabled) {
+                    uiState.cameraParams?.let { params ->
+                        CameraParamsOverlay(
+                            params = params,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 6.dp),
                         )
                     }
                 }
@@ -1428,6 +1442,37 @@ private fun HistogramOverlay(data: FloatArray, modifier: Modifier = Modifier) {
     }
 }
 
+// ── Camera parameters overlay ─────────────────────────────────────────────────
+
+private fun formatShutterSpeed(ns: Long): String {
+    val seconds = ns / 1_000_000_000.0
+    return if (seconds >= 1.0) {
+        "${"%.1f".format(seconds)}s"
+    } else {
+        val denom = (1.0 / seconds + 0.5).toInt()
+        "1/$denom"
+    }
+}
+
+@Composable
+private fun CameraParamsOverlay(params: CameraParams, modifier: Modifier = Modifier) {
+    val text = "${formatShutterSpeed(params.shutterNs)}  f/${"%.1f".format(params.aperture)}  ISO ${params.iso}"
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color(0xCC000000))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = text,
+            color = Color(0xCCFFFFFF),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 8.sp,
+            letterSpacing = 0.5.sp,
+        )
+    }
+}
+
 // ── Settings Menu Sheet ───────────────────────────────────────────────────────
 
 @Composable
@@ -1437,6 +1482,7 @@ private fun SettingsMenuSheet(
     onToggleLightLeak: () -> Unit,
     onDateMenuTap: () -> Unit,
     onToggleHistogram: () -> Unit,
+    onToggleCameraParams: () -> Unit,
     onSave: () -> Unit,
 ) {
     Box(
@@ -1486,6 +1532,7 @@ private fun SettingsMenuSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -1532,6 +1579,33 @@ private fun SettingsMenuSheet(
                     Switch(
                         checked = uiState.histogramEnabled,
                         onCheckedChange = { onToggleHistogram() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = uiState.selectedFilm.accentColor,
+                            checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),
+                            uncheckedThumbColor = Color(0xFF555555),
+                            uncheckedTrackColor = Color(0xFF222222),
+                        ),
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
+                // ── Camera parameters ─────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "CAMERA PARAMS",
+                        color = Color(0xFF555555),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 2.sp,
+                    )
+                    Switch(
+                        checked = uiState.cameraParamsEnabled,
+                        onCheckedChange = { onToggleCameraParams() },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = uiState.selectedFilm.accentColor,
                             checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),

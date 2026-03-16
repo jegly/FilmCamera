@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import androidx.camera.core.MeteringPointFactory
 import com.photoncam.camera.CameraManager
+import com.photoncam.camera.CameraParams
 import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
@@ -76,6 +77,8 @@ data class ViewfinderUiState(
     val focusDurationSeconds: Int = 5,
     val histogramEnabled: Boolean = false,
     val histogramData: FloatArray? = null,
+    val cameraParamsEnabled: Boolean = false,
+    val cameraParams: CameraParams? = null,
 )
 
 @HiltViewModel
@@ -123,10 +126,12 @@ class ViewfinderViewModel @Inject constructor(
                     mainZoomRatio = saved.mainZoomRatio,
                     focusDurationSeconds = saved.focusDurationSeconds,
                     histogramEnabled = saved.histogramEnabled,
+                    cameraParamsEnabled = saved.cameraParamsEnabled,
                 )
             }
             // Re-apply histogram enable state in case bindCamera() already ran
             cameraManager.setHistogramEnabled(saved.histogramEnabled)
+            cameraManager.setCameraParamsEnabled(saved.cameraParamsEnabled)
 
             // Re-apply saved zoom in case bindCamera() already ran before settings loaded
             // (race condition on cold start). Silently ignored if camera isn't bound yet —
@@ -139,6 +144,13 @@ class ViewfinderViewModel @Inject constructor(
         viewModelScope.launch {
             cameraManager.histogramData.collect { data ->
                 _uiState.update { it.copy(histogramData = data) }
+            }
+        }
+
+        // Collect real-time camera params (shutter / ISO / aperture)
+        viewModelScope.launch {
+            cameraManager.cameraParams.collect { params ->
+                _uiState.update { it.copy(cameraParams = params) }
             }
         }
 
@@ -206,6 +218,7 @@ class ViewfinderViewModel @Inject constructor(
                     mainZoomRatio = state.mainZoomRatio,
                     focusDurationSeconds = state.focusDurationSeconds,
                     histogramEnabled = state.histogramEnabled,
+                    cameraParamsEnabled = state.cameraParamsEnabled,
                 )
             )
         }
@@ -509,6 +522,13 @@ class ViewfinderViewModel @Inject constructor(
         val enabled = !_uiState.value.histogramEnabled
         _uiState.update { it.copy(histogramEnabled = enabled) }
         cameraManager.setHistogramEnabled(enabled)
+        persistSettings()
+    }
+
+    fun toggleCameraParams() {
+        val enabled = !_uiState.value.cameraParamsEnabled
+        _uiState.update { it.copy(cameraParamsEnabled = enabled) }
+        cameraManager.setCameraParamsEnabled(enabled)
         persistSettings()
     }
 
