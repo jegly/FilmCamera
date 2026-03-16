@@ -205,7 +205,7 @@ fun FilmSelectorSheet(
                         LutType.PRESET -> Color(0xFF888888)
                     }
                     CategoryChip(
-                        label = lut.name,
+                        label = lut.displayName,
                         active = activeLutType == lut,
                         color = lutColor,
                         onClick = { activeLutType = if (activeLutType == lut) null else lut },
@@ -344,7 +344,7 @@ private fun FilmRow(
 
         // LUT type badge
         val (lutBg, lutFg, lutLabel) = when (film.lutType) {
-            LutType.PNG    -> Triple(Color(0xFF1A2E1A), Color(0xFF6AB06A), "PNG")
+            LutType.PNG    -> Triple(Color(0xFF1A2E1A), Color(0xFF6AB06A), LutType.PNG.displayName)
             LutType.CUBE   -> Triple(Color(0xFF1A1E30), Color(0xFF6A88D0), "CUBE")
             LutType.PRESET -> Triple(Color(0xFF222222), Color(0xFF666666), "PRESET")
         }

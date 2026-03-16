@@ -20,7 +20,11 @@ import androidx.compose.ui.graphics.Color
  * @param accentColor UI accent used in film selector and overlays.
  * @param description Short marketing-style description shown in the film picker.
  */
-enum class LutType { CUBE, PNG, PRESET }
+enum class LutType(val displayName: String) {
+    CUBE("CUBE"),
+    PNG("HaldCLUT"),
+    PRESET("PRESET"),
+}
 
 enum class FilmCategory(val displayName: String) {
     COLOR("Color"),
