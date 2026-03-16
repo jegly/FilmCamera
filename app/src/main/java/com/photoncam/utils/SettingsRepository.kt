@@ -7,7 +7,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.photoncam.film.FilmCatalog
-import com.photoncam.processing.DateImprintBlur
 import com.photoncam.processing.DateImprintColor
 import com.photoncam.processing.DateImprintFont
 import com.photoncam.processing.DateImprintPosition
@@ -32,7 +31,10 @@ data class AppSettings(
     val dateImprintFont: DateImprintFont,
     val dateImprintSize: DateImprintSize,
     val dateImprintPosition: DateImprintPosition,
-    val dateImprintBlur: DateImprintBlur,
+    val dateImprintGlow: Int = 100,
+    val dateImprintBlur: Int = 50,
+    val dateImprintOpacity: Int = 50,
+    val dateImprintBlurRepeat: Int = 3,
     val totalShotsTaken: Int = 0,
     val favoriteFilmIds: Set<String> = emptySet(),
     val flashEnabled: Boolean = false,
@@ -53,7 +55,10 @@ class SettingsRepository @Inject constructor(
         val dateImprintFont = stringPreferencesKey("date_imprint_font")
         val dateImprintSize = stringPreferencesKey("date_imprint_size")
         val dateImprintPosition = stringPreferencesKey("date_imprint_position")
-        val dateImprintBlur = stringPreferencesKey("date_imprint_blur")
+        val dateImprintGlow = intPreferencesKey("date_imprint_glow")
+        val dateImprintBlur = intPreferencesKey("date_imprint_blur_amount")
+        val dateImprintOpacity = intPreferencesKey("date_imprint_opacity")
+        val dateImprintBlurRepeat = intPreferencesKey("date_imprint_blur_repeat")
         val totalShotsTaken = intPreferencesKey("total_shots_taken")
         val favoriteFilmIds = stringPreferencesKey("favorite_film_ids")
         val flashEnabled = booleanPreferencesKey("flash_enabled")
@@ -81,9 +86,10 @@ class SettingsRepository @Inject constructor(
             dateImprintPosition = prefs[Keys.dateImprintPosition]
                 ?.let { runCatching { DateImprintPosition.valueOf(it) }.getOrNull() }
                 ?: DateImprintPosition.BOTTOM_RIGHT,
-            dateImprintBlur = prefs[Keys.dateImprintBlur]
-                ?.let { runCatching { DateImprintBlur.valueOf(it) }.getOrNull() }
-                ?: DateImprintBlur.SOFT,
+            dateImprintGlow = prefs[Keys.dateImprintGlow] ?: 100,
+            dateImprintBlur = prefs[Keys.dateImprintBlur] ?: 50,
+            dateImprintOpacity = prefs[Keys.dateImprintOpacity] ?: 50,
+            dateImprintBlurRepeat = prefs[Keys.dateImprintBlurRepeat] ?: 3,
             totalShotsTaken = prefs[Keys.totalShotsTaken] ?: 0,
             favoriteFilmIds = prefs[Keys.favoriteFilmIds]
                 ?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
@@ -107,7 +113,10 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.dateImprintFont] = settings.dateImprintFont.name
             prefs[Keys.dateImprintSize] = settings.dateImprintSize.name
             prefs[Keys.dateImprintPosition] = settings.dateImprintPosition.name
-            prefs[Keys.dateImprintBlur] = settings.dateImprintBlur.name
+            prefs[Keys.dateImprintGlow] = settings.dateImprintGlow
+            prefs[Keys.dateImprintBlur] = settings.dateImprintBlur
+            prefs[Keys.dateImprintOpacity] = settings.dateImprintOpacity
+            prefs[Keys.dateImprintBlurRepeat] = settings.dateImprintBlurRepeat
             prefs[Keys.totalShotsTaken] = settings.totalShotsTaken
             prefs[Keys.favoriteFilmIds] = settings.favoriteFilmIds.joinToString(",")
             prefs[Keys.flashEnabled] = settings.flashEnabled

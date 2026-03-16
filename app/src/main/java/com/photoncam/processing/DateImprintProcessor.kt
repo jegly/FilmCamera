@@ -40,7 +40,13 @@ class DateImprintProcessor @Inject constructor(
         font: DateImprintFont = DateImprintFont.LED,
         size: DateImprintSize = DateImprintSize.MEDIUM,
         position: DateImprintPosition = DateImprintPosition.BOTTOM_RIGHT,
-        blur: DateImprintBlur = DateImprintBlur.SOFT,
+        /** 0–100: radius of the bloom halo drawn behind the text. */
+        glowAmount: Int = 100,
+        /** 0–100: soft-focus blur applied to the sharp text layer itself. */
+        blurAmount: Int = 50,
+        opacity: Int = 50,
+        /** 0–20: how many times the blur text layer is drawn to intensify without widening. */
+        blurRepeat: Int = 3,
     ): Bitmap {
         // Draw directly onto the mutable source bitmap — no copy needed.
         val result = bitmap
@@ -70,13 +76,14 @@ class DateImprintProcessor @Inject constructor(
         // ── Color ──────────────────────────────────────────────────────────────
         val textColor = Color.parseColor(color.hex)
 
-        // ── Blur radius ────────────────────────────────────────────────────────
-        // Shorter radius than before → tighter halo; higher alpha → more intense.
-        val blurRadius = when (blur) {
-            DateImprintBlur.NONE -> 0f
-            DateImprintBlur.SOFT -> textSize * 0.12f
-            DateImprintBlur.GLOW -> textSize * 0.26f
-        }
+        // ── Opacity ────────────────────────────────────────────────────────────
+        val opacityFactor = opacity.coerceIn(0, 100) / 100f
+
+        // ── Glow radius (bloom halo) ───────────────────────────────────────────
+        val glowRadius = textSize * (glowAmount.coerceIn(0, 100) / 100f) * 0.375f
+
+        // ── Text blur radius (soft-focus diffusion) ────────────────────────────
+        val textBlurRadius = textSize * (blurAmount.coerceIn(0, 100) / 100f) * 0.2f
 
         // ── Paints ─────────────────────────────────────────────────────────────
 
@@ -85,35 +92,38 @@ class DateImprintProcessor @Inject constructor(
             this.color = Color.BLACK
             this.textSize = textSize
             this.typeface = typeface
-            alpha = 160
+            alpha = (160 * opacityFactor).toInt()
         }
 
         // Glow layer — blurred halo drawn before the sharp text
-        val glowPaint: Paint? = if (blurRadius > 0f) {
+        val glowPaint: Paint? = if (glowRadius > 0f) {
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.color = textColor
                 this.textSize = textSize
                 this.typeface = typeface
-                alpha = if (blur == DateImprintBlur.GLOW) 255 else 220
-                maskFilter = BlurMaskFilter(blurRadius, BlurMaskFilter.Blur.SOLID)
+                alpha = (255 * opacityFactor).toInt()
+                maskFilter = BlurMaskFilter(glowRadius, BlurMaskFilter.Blur.SOLID)
             }
         } else null
 
-        // Sharp foreground text
+        // Sharp foreground text (with optional soft-focus blur)
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = textColor
             this.textSize = textSize
             this.typeface = typeface
+            alpha = (255 * opacityFactor).toInt()
+            if (textBlurRadius > 0f) {
+                maskFilter = BlurMaskFilter(textBlurRadius, BlurMaskFilter.Blur.NORMAL)
+            }
         }
 
         // LED "inactive segments" ghost — very faint same-color layer underneath
-        // Creates the illusion of dark segment slots visible behind the active digits.
         val ghostPaint: Paint? = if (font == DateImprintFont.LED) {
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.color = textColor
                 this.textSize = textSize
                 this.typeface = typeface
-                alpha = 30
+                alpha = (30 * opacityFactor).toInt()
             }
         } else null
 
@@ -144,8 +154,8 @@ class DateImprintProcessor @Inject constructor(
         canvas.drawText(dateString, x + 2f, y + 2f, shadowPaint)
         // 3. Glow halo (if blur enabled)
         glowPaint?.let { canvas.drawText(dateString, x, y, it) }
-        // 4. Sharp text on top
-        canvas.drawText(dateString, x, y, textPaint)
+        // 4. Sharp/blur text — drawn blurRepeat times to intensify without widening the blur area
+        repeat(blurRepeat.coerceIn(1, 20)) { canvas.drawText(dateString, x, y, textPaint) }
 
         return result
     }

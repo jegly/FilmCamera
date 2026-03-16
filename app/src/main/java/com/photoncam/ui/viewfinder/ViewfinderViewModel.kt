@@ -2,36 +2,39 @@ package com.photoncam.ui.viewfinder
 
 import android.net.Uri
 import android.util.Range
-import kotlinx.coroutines.Dispatchers
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.photoncam.camera.CameraManager
 import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
-import com.photoncam.processing.DateImprintBlur
 import com.photoncam.processing.DateImprintColor
 import com.photoncam.processing.DateImprintFont
 import com.photoncam.processing.DateImprintPosition
 import com.photoncam.processing.DateImprintSize
 import com.photoncam.processing.DateImprintStyle
-import com.photoncam.processing.ImageProcessor
+import com.photoncam.processing.PhotoProcessingWorker
 import com.photoncam.utils.AppSettings
 import com.photoncam.utils.GalleryExporter
 import com.photoncam.utils.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class ViewfinderUiState(
@@ -48,7 +51,10 @@ data class ViewfinderUiState(
     val dateImprintFont: DateImprintFont = DateImprintFont.LED,
     val dateImprintSize: DateImprintSize = DateImprintSize.MEDIUM,
     val dateImprintPosition: DateImprintPosition = DateImprintPosition.BOTTOM_RIGHT,
-    val dateImprintBlur: DateImprintBlur = DateImprintBlur.SOFT,
+    val dateImprintGlow: Int = 100,
+    val dateImprintBlur: Int = 50,
+    val dateImprintOpacity: Int = 50,
+    val dateImprintBlurRepeat: Int = 3,
     val showDateImprintMenu: Boolean = false,
     val lightLeakEnabled: Boolean = true,
     val error: String? = null,
@@ -65,7 +71,7 @@ data class ViewfinderUiState(
 @HiltViewModel
 class ViewfinderViewModel @Inject constructor(
     private val cameraManager: CameraManager,
-    private val imageProcessor: ImageProcessor,
+    private val workManager: WorkManager,
     private val galleryExporter: GalleryExporter,
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
@@ -77,10 +83,8 @@ class ViewfinderViewModel @Inject constructor(
     private var bindJob: Job? = null
     private var savedLensId: String? = null
 
-    // Limit concurrent image-processing jobs to 2.
-    // Each job allocates ~48 MB for the bitmap; more than 2 simultaneous jobs
-    // on a 256 MB heap causes OOM when photos are taken in rapid succession.
-    private val processSemaphore = Semaphore(2)
+    // Track work IDs we've already reported to the UI to avoid duplicate updates.
+    private val reportedWorkIds = mutableSetOf<UUID>()
 
     init {
         viewModelScope.launch {
@@ -96,7 +100,10 @@ class ViewfinderViewModel @Inject constructor(
                     dateImprintFont = saved.dateImprintFont,
                     dateImprintSize = saved.dateImprintSize,
                     dateImprintPosition = saved.dateImprintPosition,
+                    dateImprintGlow = saved.dateImprintGlow,
                     dateImprintBlur = saved.dateImprintBlur,
+                    dateImprintOpacity = saved.dateImprintOpacity,
+                    dateImprintBlurRepeat = saved.dateImprintBlurRepeat,
                     totalShotsTaken = saved.totalShotsTaken,
                     favoriteFilmIds = saved.favoriteFilmIds,
                     flashEnabled = saved.flashEnabled,
@@ -108,6 +115,38 @@ class ViewfinderViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val uri = galleryExporter.getLatestPhotoUri()
             if (uri != null) _uiState.update { it.copy(latestGalleryUri = uri) }
+        }
+
+        // Observe all PhotonCam processing work: update processingCount and surface
+        // completed URIs. Uses LiveData.asFlow() so it works on all API levels.
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagLiveData(PhotoProcessingWorker.WORK_TAG)
+                .asFlow()
+                .collect { workInfos ->
+                    val active = workInfos.count {
+                        it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED
+                    }
+                    _uiState.update { it.copy(processingCount = active) }
+
+                    workInfos.filter {
+                        it.state == WorkInfo.State.SUCCEEDED && it.id !in reportedWorkIds
+                    }.forEach { info ->
+                        reportedWorkIds.add(info.id)
+                        val uriStr = info.outputData.getString(PhotoProcessingWorker.KEY_GALLERY_URI)
+                        val uri = uriStr?.let { Uri.parse(it) }
+                        if (uri != null) {
+                            _uiState.update { it.copy(lastCapturedUri = uri, latestGalleryUri = uri) }
+                            persistSettings()
+                        }
+                    }
+
+                    workInfos.filter {
+                        it.state == WorkInfo.State.FAILED && it.id !in reportedWorkIds
+                    }.forEach { info ->
+                        reportedWorkIds.add(info.id)
+                        _uiState.update { it.copy(error = "Processing failed") }
+                    }
+                }
         }
     }
 
@@ -126,7 +165,10 @@ class ViewfinderViewModel @Inject constructor(
                     dateImprintFont = state.dateImprintFont,
                     dateImprintSize = state.dateImprintSize,
                     dateImprintPosition = state.dateImprintPosition,
+                    dateImprintGlow = state.dateImprintGlow,
                     dateImprintBlur = state.dateImprintBlur,
+                    dateImprintOpacity = state.dateImprintOpacity,
+                    dateImprintBlurRepeat = state.dateImprintBlurRepeat,
                     totalShotsTaken = state.totalShotsTaken,
                     favoriteFilmIds = state.favoriteFilmIds,
                     flashEnabled = state.flashEnabled,
@@ -304,8 +346,23 @@ class ViewfinderViewModel @Inject constructor(
         persistSettings()
     }
 
-    fun setDateImprintBlur(blur: DateImprintBlur) {
-        _uiState.update { it.copy(dateImprintBlur = blur) }
+    fun setDateImprintGlow(glow: Int) {
+        _uiState.update { it.copy(dateImprintGlow = glow.coerceIn(0, 100)) }
+        persistSettings()
+    }
+
+    fun setDateImprintBlur(blur: Int) {
+        _uiState.update { it.copy(dateImprintBlur = blur.coerceIn(0, 100)) }
+        persistSettings()
+    }
+
+    fun setDateImprintOpacity(opacity: Int) {
+        _uiState.update { it.copy(dateImprintOpacity = opacity.coerceIn(0, 100)) }
+        persistSettings()
+    }
+
+    fun setDateImprintBlurRepeat(repeat: Int) {
+        _uiState.update { it.copy(dateImprintBlurRepeat = repeat.coerceIn(0, 20)) }
         persistSettings()
     }
 
@@ -373,7 +430,10 @@ class ViewfinderViewModel @Inject constructor(
         val dateFont = state.dateImprintFont
         val dateSize = state.dateImprintSize
         val datePosition = state.dateImprintPosition
+        val dateGlow = state.dateImprintGlow
         val dateBlur = state.dateImprintBlur
+        val dateOpacity = state.dateImprintOpacity
+        val dateBlurRepeat = state.dateImprintBlurRepeat
         val lightLeak = state.lightLeakEnabled
         val isFrontCamera = state.selectedLens?.id == "camera_front"
         val useScreenFlash = state.flashEnabled && isFrontCamera
@@ -401,54 +461,32 @@ class ViewfinderViewModel @Inject constructor(
                         it.copy(
                             isCapturing = false,
                             totalShotsTaken = newTotal,
-                            processingCount = it.processingCount + 1,
                         )
                     }
+                    persistSettings()
 
-                    viewModelScope.launch {
-                        processSemaphore.withPermit {
-                            imageProcessor.process(
-                                inputFile = rawFile,
-                                film = film,
-                                dateImprintEnabled = dateEnabled,
-                                dateImprintStyle = dateStyle,
-                                dateImprintColor = dateColor,
-                                dateImprintFont = dateFont,
-                                dateImprintSize = dateSize,
-                                dateImprintPosition = datePosition,
-                                dateImprintBlur = dateBlur,
-                                lightLeakEnabled = lightLeak,
-                            ).onSuccess { processedFile ->
-                                galleryExporter.saveToGallery(processedFile)
-                                    .onSuccess { uri ->
-                                        _uiState.update {
-                                            it.copy(
-                                                lastCapturedUri = uri,
-                                                latestGalleryUri = uri,
-                                                processingCount = (it.processingCount - 1).coerceAtLeast(0),
-                                            )
-                                        }
-                                        persistSettings()
-                                    }
-                                    .onFailure { e ->
-                                        _uiState.update {
-                                            it.copy(
-                                                processingCount = (it.processingCount - 1).coerceAtLeast(0),
-                                                error = "Save failed: ${e.message}",
-                                            )
-                                        }
-                                    }
-                            }.onFailure { e ->
-                                _uiState.update {
-                                    it.copy(
-                                        processingCount = (it.processingCount - 1).coerceAtLeast(0),
-                                        error = "Processing failed: ${e.message}",
-                                    )
-                                }
-                            }
-                            rawFile.delete()
-                        }
-                    }
+                    // Enqueue processing as a WorkManager task so it survives app close.
+                    val request = OneTimeWorkRequestBuilder<PhotoProcessingWorker>()
+                        .addTag(PhotoProcessingWorker.WORK_TAG)
+                        .setInputData(
+                            workDataOf(
+                                PhotoProcessingWorker.KEY_RAW_FILE_PATH to rawFile.absolutePath,
+                                PhotoProcessingWorker.KEY_FILM_ID to film.id,
+                                PhotoProcessingWorker.KEY_DATE_IMPRINT_ENABLED to dateEnabled,
+                                PhotoProcessingWorker.KEY_DATE_STYLE to dateStyle.name,
+                                PhotoProcessingWorker.KEY_DATE_COLOR to dateColor.name,
+                                PhotoProcessingWorker.KEY_DATE_FONT to dateFont.name,
+                                PhotoProcessingWorker.KEY_DATE_SIZE to dateSize.name,
+                                PhotoProcessingWorker.KEY_DATE_POSITION to datePosition.name,
+                                PhotoProcessingWorker.KEY_DATE_GLOW to dateGlow,
+                                PhotoProcessingWorker.KEY_DATE_BLUR to dateBlur,
+                                PhotoProcessingWorker.KEY_DATE_OPACITY to dateOpacity,
+                                PhotoProcessingWorker.KEY_DATE_BLUR_REPEAT to dateBlurRepeat,
+                                PhotoProcessingWorker.KEY_LIGHT_LEAK_ENABLED to lightLeak,
+                            )
+                        )
+                        .build()
+                    workManager.enqueue(request)
                 }
                 .onFailure { e ->
                     if (useScreenFlash) {

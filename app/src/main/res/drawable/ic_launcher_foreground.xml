@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PhotonCam launcher icon — camera aperture iris.
+  Mirrors PhotonLab structure exactly: white bg + cyan ring (r=30) + dotted lens circle + 6-blade
+  aperture lines + inner lens ring + cyan centre dot.
+  Color palette: #00E5FF electric cyan, same as PhotonLab.
+  108×108dp canvas | safe zone 18–90 | centre (54,54).
+
+  Geometry:
+    Outer ring:      r=30  (identical to PhotonLab)
+    Dotted circle:   r=19  (replaces PhotonLab's dotted photo frame)
+    Aperture blades: 6 twisted lines, inner r=6 → outer r=17, each outer end offset +30°
+    Inner lens ring: r=12  (replaces PhotonLab's histogram baseline)
+    Centre dot:      r=4
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Pale cyan fill inside the ring — identical to PhotonLab -->
+    <path
+        android:pathData="M54,24 A30,30 0 1,0 54,84 A30,30 0 1,0 54,24 Z"
+        android:fillColor="#1800E5FF" />
+
+    <!-- Cyan ring r=30, thick stroke — identical to PhotonLab -->
+    <path
+        android:pathData="M54,24 A30,30 0 1,0 54,84 A30,30 0 1,0 54,24 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="3.0" />
+
+    <!--
+      Dotted lens circle — r=19, 20 dots at 18° intervals, each dot 2×2.
+      Replaces the dotted rectangular photo frame in PhotonLab.
+      Dot centres at (54 + 19·cosθ, 54 + 19·sinθ) for θ = 0°,18°,…,342°.
+    -->
+    <path
+        android:fillColor="#CC00E5FF"
+        android:pathData="
+M72,53 h2 v2 h-2 Z
+M71,59 h2 v2 h-2 Z
+M68,64 h2 v2 h-2 Z
+M64,68 h2 v2 h-2 Z
+M59,71 h2 v2 h-2 Z
+M53,72 h2 v2 h-2 Z
+M47,71 h2 v2 h-2 Z
+M42,68 h2 v2 h-2 Z
+M38,64 h2 v2 h-2 Z
+M35,59 h2 v2 h-2 Z
+M33,53 h2 v2 h-2 Z
+M34,47 h2 v2 h-2 Z
+M37,42 h2 v2 h-2 Z
+M41,38 h2 v2 h-2 Z
+M47,35 h2 v2 h-2 Z
+M53,33 h2 v2 h-2 Z
+M59,34 h2 v2 h-2 Z
+M64,37 h2 v2 h-2 Z
+M68,41 h2 v2 h-2 Z
+M71,47 h2 v2 h-2 Z" />
+
+    <!--
+      6 aperture blade lines — twisted: inner end at angle θ on r=6,
+      outer end at angle (θ+30°) on r=17. Creates the classic iris/shutter look.
+      Coordinates (rounded to 1 dp):
+        Blade 1: (60.0, 54.0) → (68.7, 62.5)   inner 0°   outer 30°
+        Blade 2: (57.0, 59.2) → (54.0, 71.0)   inner 60°  outer 90°
+        Blade 3: (51.0, 59.2) → (39.3, 62.5)   inner 120° outer 150°
+        Blade 4: (48.0, 54.0) → (39.3, 45.5)   inner 180° outer 210°
+        Blade 5: (51.0, 48.8) → (54.0, 37.0)   inner 240° outer 270°
+        Blade 6: (57.0, 48.8) → (68.7, 45.5)   inner 300° outer 330°
+    -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M60.0,54.0 L68.7,62.5" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M57.0,59.2 L54.0,71.0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M51.0,59.2 L39.3,62.5" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M48.0,54.0 L39.3,45.5" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M51.0,48.8 L54.0,37.0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#CC00E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M57.0,48.8 L68.7,45.5" />
+
+    <!-- Inner lens ring — replaces PhotonLab's histogram baseline -->
+    <path
+        android:pathData="M42,54 A12,12 0 1,0 66,54 A12,12 0 1,0 42,54 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#8000E5FF"
+        android:strokeWidth="1.5" />
+
+    <!-- Centre dot — lens element / photon core -->
+    <path
+        android:pathData="M50,54 A4,4 0 1,0 58,54 A4,4 0 1,0 50,54 Z"
+        android:fillColor="#CC00E5FF" />
+
+</vector>

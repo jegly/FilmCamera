@@ -14,8 +14,8 @@ android {
         applicationId = "com.photoncam"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.2-alpha1"
+        versionCode = 16
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -84,6 +84,12 @@ dependencies {
 
     // DataStore
     implementation(libs.datastore.preferences)
+
+    // WorkManager + Hilt integration
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.androidx.compiler)
+    implementation(libs.lifecycle.livedata.ktx)
 
     // Testing
     testImplementation(libs.junit)

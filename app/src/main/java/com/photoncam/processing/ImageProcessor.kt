@@ -39,7 +39,10 @@ class ImageProcessor @Inject constructor(
         dateImprintFont: DateImprintFont = DateImprintFont.LED,
         dateImprintSize: DateImprintSize = DateImprintSize.MEDIUM,
         dateImprintPosition: DateImprintPosition = DateImprintPosition.BOTTOM_RIGHT,
-        dateImprintBlur: DateImprintBlur = DateImprintBlur.SOFT,
+        dateImprintGlow: Int = 100,
+        dateImprintBlur: Int = 50,
+        dateImprintOpacity: Int = 50,
+        dateImprintBlurRepeat: Int = 3,
         lightLeakEnabled: Boolean = true,
     ): Result<File> = withContext(Dispatchers.Default) {
         runCatching {
@@ -59,7 +62,10 @@ class ImageProcessor @Inject constructor(
                     dateImprintFont,
                     dateImprintSize,
                     dateImprintPosition,
+                    dateImprintGlow,
                     dateImprintBlur,
+                    dateImprintOpacity,
+                    dateImprintBlurRepeat,
                 )
             }
 

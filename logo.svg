@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120">
+  <!--
+    PhotonCam logo — same visual language as PhotonLab.
+    Icon: white circle bg + cyan ring + dotted lens circle + 6-blade aperture + centre dot.
+    Wordmark: E0F7FA "PHOTON" + 00E5FF "CAM"
+  -->
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- App background (dark, like the phone home screen) -->
+  <rect width="480" height="120" rx="14" fill="#0F1316"/>
+
+  <!-- ── Icon (60px circle, centred at 60,60) ─────────────────────────── -->
+  <!-- Scale factor: 108dp → 60px = 0.556×; centre (54,54) → (60,60)     -->
+
+  <!-- White circle background -->
+  <circle cx="60" cy="60" r="33" fill="#FFFFFF"/>
+
+  <!-- Pale cyan fill inside ring -->
+  <circle cx="60" cy="60" r="16.7" fill="#00E5FF" fill-opacity="0.094"/>
+
+  <!-- Cyan ring r=16.7 (=30×0.556) -->
+  <circle cx="60" cy="60" r="16.7" fill="none" stroke="#00E5FF" stroke-opacity="0.8" stroke-width="1.67"/>
+
+  <!-- Dotted lens circle r=10.6 (=19×0.556) — 20 dots at 18° -->
+  <g fill="#00E5FF" fill-opacity="0.8">
+    <rect x="69.8" y="58.9" width="1.1" height="1.1"/>
+    <rect x="69.2" y="62.2" width="1.1" height="1.1"/>
+    <rect x="67.8" y="65.6" width="1.1" height="1.1"/>
+    <rect x="65.6" y="67.8" width="1.1" height="1.1"/>
+    <rect x="62.8" y="69.5" width="1.1" height="1.1"/>
+    <rect x="59.4" y="70.1" width="1.1" height="1.1"/>
+    <rect x="56.1" y="69.5" width="1.1" height="1.1"/>
+    <rect x="53.3" y="67.8" width="1.1" height="1.1"/>
+    <rect x="51.1" y="65.6" width="1.1" height="1.1"/>
+    <rect x="49.7" y="62.2" width="1.1" height="1.1"/>
+    <rect x="49.2" y="58.9" width="1.1" height="1.1"/>
+    <rect x="49.7" y="55.6" width="1.1" height="1.1"/>
+    <rect x="51.1" y="52.3" width="1.1" height="1.1"/>
+    <rect x="53.3" y="50.1" width="1.1" height="1.1"/>
+    <rect x="56.1" y="48.4" width="1.1" height="1.1"/>
+    <rect x="59.4" y="47.8" width="1.1" height="1.1"/>
+    <rect x="62.8" y="48.4" width="1.1" height="1.1"/>
+    <rect x="65.6" y="50.1" width="1.1" height="1.1"/>
+    <rect x="67.8" y="52.3" width="1.1" height="1.1"/>
+    <rect x="69.2" y="55.6" width="1.1" height="1.1"/>
+  </g>
+
+  <!-- 6 aperture blade lines (twisted, inner r=3.3, outer r=9.5, +30° offset) -->
+  <g stroke="#00E5FF" stroke-opacity="0.8" stroke-width="1.4" stroke-linecap="round" fill="none">
+    <!-- blade 1: inner 0° outer 30°  -->
+    <line x1="63.3" y1="60.0" x2="68.2" y2="64.8"/>
+    <!-- blade 2: inner 60° outer 90° -->
+    <line x1="61.7" y1="62.9" x2="60.0" y2="69.5"/>
+    <!-- blade 3: inner 120° outer 150° -->
+    <line x1="58.3" y1="62.9" x2="51.8" y2="64.8"/>
+    <!-- blade 4: inner 180° outer 210° -->
+    <line x1="56.7" y1="60.0" x2="51.8" y2="55.2"/>
+    <!-- blade 5: inner 240° outer 270° -->
+    <line x1="58.3" y1="57.1" x2="60.0" y2="50.5"/>
+    <!-- blade 6: inner 300° outer 330° -->
+    <line x1="61.7" y1="57.1" x2="68.2" y2="55.2"/>
+  </g>
+
+  <!-- Inner lens ring r=6.7 (=12×0.556) -->
+  <circle cx="60" cy="60" r="6.7" fill="none" stroke="#00E5FF" stroke-opacity="0.5" stroke-width="0.84"/>
+
+  <!-- Centre dot r=2.2 (=4×0.556) -->
+  <circle cx="60" cy="60" r="2.2" fill="#00E5FF" fill-opacity="0.8"/>
+
+  <!-- ── Wordmark ──────────────────────────────────────────────────────── -->
+
+  <text x="108" y="66"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="34" font-weight="700" letter-spacing="-0.5"
+    fill="#E0F7FA">PHOTON</text>
+
+  <text x="293" y="66"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="34" font-weight="700" letter-spacing="-0.5"
+    fill="#00E5FF">CAM</text>
+
+  <!-- Tagline -->
+  <text x="109" y="89"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="11.5" letter-spacing="3.5"
+    fill="#004D5C">ANALOG FILM CAMERA</text>
+
+  <!-- Android badge -->
+  <rect x="392" y="76" width="68" height="18" rx="9"
+    fill="#00E5FF" fill-opacity="0.08"
+    stroke="#00E5FF" stroke-width="0.7" stroke-opacity="0.4"/>
+  <text x="426" y="89"
+    font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="9" font-weight="600" letter-spacing="1.5"
+    fill="#00E5FF" fill-opacity="0.7" text-anchor="middle">ANDROID</text>
+
+</svg>

@@ -76,7 +76,6 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.photoncam.camera.LensInfo
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
-import com.photoncam.processing.DateImprintBlur
 import com.photoncam.processing.DateImprintColor
 import com.photoncam.processing.DateImprintFont
 import com.photoncam.processing.DateImprintPosition
@@ -351,7 +350,10 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onSetFont = viewModel::setDateImprintFont,
                 onSetSize = viewModel::setDateImprintSize,
                 onSetPosition = viewModel::setDateImprintPosition,
+                onSetGlow = viewModel::setDateImprintGlow,
                 onSetBlur = viewModel::setDateImprintBlur,
+                onSetOpacity = viewModel::setDateImprintOpacity,
+                onSetBlurRepeat = viewModel::setDateImprintBlurRepeat,
             )
         }
 
@@ -917,7 +919,10 @@ private fun DateImprintMenuSheet(
     onSetFont: (DateImprintFont) -> Unit,
     onSetSize: (DateImprintSize) -> Unit,
     onSetPosition: (DateImprintPosition) -> Unit,
-    onSetBlur: (DateImprintBlur) -> Unit,
+    onSetGlow: (Int) -> Unit,
+    onSetBlur: (Int) -> Unit,
+    onSetOpacity: (Int) -> Unit,
+    onSetBlurRepeat: (Int) -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -1066,18 +1071,79 @@ private fun DateImprintMenuSheet(
                 }
 
                 // Glow
-                DateMenuSection(label = "GLOW") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DateImprintBlur.entries.forEach { blurOption ->
-                            DateChip(
-                                label = blurOption.label,
-                                selected = uiState.dateImprintBlur == blurOption && uiState.dateImprintEnabled,
-                                enabled = uiState.dateImprintEnabled,
-                                accentColor = uiState.selectedFilm.accentColor,
-                                onClick = { onSetBlur(blurOption) },
-                            )
-                        }
-                    }
+                DateMenuSection(label = "GLOW  ${uiState.dateImprintGlow}%") {
+                    androidx.compose.material3.Slider(
+                        value = uiState.dateImprintGlow.toFloat(),
+                        onValueChange = { onSetGlow(it.toInt()) },
+                        valueRange = 0f..100f,
+                        steps = 19,
+                        enabled = uiState.dateImprintEnabled,
+                        colors = androidx.compose.material3.SliderDefaults.colors(
+                            thumbColor = uiState.selectedFilm.accentColor,
+                            activeTrackColor = uiState.selectedFilm.accentColor,
+                            inactiveTrackColor = Color(0xFF333333),
+                            disabledThumbColor = Color(0xFF444444),
+                            disabledActiveTrackColor = Color(0xFF333333),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // Blur
+                DateMenuSection(label = "BLUR  ${uiState.dateImprintBlur}%") {
+                    androidx.compose.material3.Slider(
+                        value = uiState.dateImprintBlur.toFloat(),
+                        onValueChange = { onSetBlur(it.toInt()) },
+                        valueRange = 0f..100f,
+                        steps = 19,
+                        enabled = uiState.dateImprintEnabled,
+                        colors = androidx.compose.material3.SliderDefaults.colors(
+                            thumbColor = uiState.selectedFilm.accentColor,
+                            activeTrackColor = uiState.selectedFilm.accentColor,
+                            inactiveTrackColor = Color(0xFF333333),
+                            disabledThumbColor = Color(0xFF444444),
+                            disabledActiveTrackColor = Color(0xFF333333),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // Opacity
+                DateMenuSection(label = "OPACITY  ${uiState.dateImprintOpacity}%") {
+                    androidx.compose.material3.Slider(
+                        value = uiState.dateImprintOpacity.toFloat(),
+                        onValueChange = { onSetOpacity(it.toInt()) },
+                        valueRange = 0f..100f,
+                        steps = 19,
+                        enabled = uiState.dateImprintEnabled,
+                        colors = androidx.compose.material3.SliderDefaults.colors(
+                            thumbColor = uiState.selectedFilm.accentColor,
+                            activeTrackColor = uiState.selectedFilm.accentColor,
+                            inactiveTrackColor = Color(0xFF333333),
+                            disabledThumbColor = Color(0xFF444444),
+                            disabledActiveTrackColor = Color(0xFF333333),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                // Blur repeat
+                DateMenuSection(label = "BLUR LAYERS  ${uiState.dateImprintBlurRepeat}") {
+                    androidx.compose.material3.Slider(
+                        value = uiState.dateImprintBlurRepeat.toFloat(),
+                        onValueChange = { onSetBlurRepeat(it.toInt()) },
+                        valueRange = 0f..20f,
+                        steps = 19,
+                        enabled = uiState.dateImprintEnabled,
+                        colors = androidx.compose.material3.SliderDefaults.colors(
+                            thumbColor = uiState.selectedFilm.accentColor,
+                            activeTrackColor = uiState.selectedFilm.accentColor,
+                            inactiveTrackColor = Color(0xFF333333),
+                            disabledThumbColor = Color(0xFF444444),
+                            disabledActiveTrackColor = Color(0xFF333333),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
 

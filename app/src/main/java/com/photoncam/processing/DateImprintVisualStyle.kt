@@ -19,13 +19,6 @@ enum class DateImprintFont(val label: String) {
     CONDENSED("COND"),
 }
 
-/** Blur / glow intensity of the burned-in date stamp (simulates LED bloom on film). */
-enum class DateImprintBlur(val label: String) {
-    NONE("OFF"),
-    SOFT("SOFT"),
-    GLOW("GLOW"),
-}
-
 /** Size of the burned-in date stamp relative to the image width. */
 enum class DateImprintSize(val label: String) {
     SMALL("SMALL"),
