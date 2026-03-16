@@ -117,7 +117,8 @@ class ViewfinderViewModel @Inject constructor(
             // Roll angle around the camera optical axis: 0° = portrait upright, ±90° = landscape
             val gx = event.values[0]
             val gy = event.values[1]
-            val roll = Math.toDegrees(atan2(-gx.toDouble(), gy.toDouble())).toFloat()
+            // atan2(gx, gy): 0° = portrait upright, +90° = landscape CW, ±180° = upside-down
+            val roll = Math.toDegrees(atan2(gx.toDouble(), gy.toDouble())).toFloat()
             _uiState.update { it.copy(levelAngle = roll) }
         }
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
