@@ -469,8 +469,8 @@ class ViewfinderViewModel @Inject constructor(
                 .onSuccess {
                     _uiState.update { s -> s.copy(focusPoint = s.focusPoint?.copy(focused = true)) }
                 }
-                // Success or failure: hold indicator briefly then clear
-            delay(1500)
+                // Success or failure: hold indicator then clear
+            delay(5000)
             _uiState.update { it.copy(focusPoint = null) }
         }
     }
