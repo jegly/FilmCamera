@@ -372,7 +372,10 @@ class CameraManager @Inject constructor(
         val result = runCatching {
             val ctrl = camera?.cameraControl ?: error("Camera not bound")
             val action = FocusMeteringAction.Builder(meteringPoint)
-                .setAutoCancelDuration(durationSeconds.toLong(), TimeUnit.SECONDS)
+                .apply {
+                    if (durationSeconds > 0) setAutoCancelDuration(durationSeconds.toLong(), TimeUnit.SECONDS)
+                    else disableAutoCancel()   // 0 = hold focus indefinitely
+                }
                 .build()
             suspendCancellableCoroutine { cont ->
                 val future = ctrl.startFocusAndMetering(action)

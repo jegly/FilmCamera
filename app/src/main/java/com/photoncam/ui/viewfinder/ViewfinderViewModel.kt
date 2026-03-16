@@ -474,8 +474,11 @@ class ViewfinderViewModel @Inject constructor(
                 .onSuccess {
                     _uiState.update { s -> s.copy(focusPoint = s.focusPoint?.copy(focused = true)) }
                 }
-            delay(duration * 1000L)
-            _uiState.update { it.copy(focusPoint = null) }
+            // duration == 0 means infinite: keep bracket until next tap
+            if (duration > 0) {
+                delay(duration * 1000L)
+                _uiState.update { it.copy(focusPoint = null) }
+            }
         }
     }
 
@@ -484,7 +487,8 @@ class ViewfinderViewModel @Inject constructor(
     }
 
     fun setFocusDuration(seconds: Int) {
-        _uiState.update { it.copy(focusDurationSeconds = seconds.coerceIn(1, 30)) }
+        // 0 = infinite (∞ position on slider), 1–30 = seconds
+        _uiState.update { it.copy(focusDurationSeconds = seconds.coerceIn(0, 30)) }
     }
 
     fun saveAndCloseSettings() {

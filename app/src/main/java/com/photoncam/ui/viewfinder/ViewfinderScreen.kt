@@ -1449,18 +1449,24 @@ private fun SettingsMenuSheet(
                             letterSpacing = 2.sp,
                         )
                         Text(
-                            text = "${uiState.focusDurationSeconds}s",
+                            // stored 0 = infinite; slider position 31 = ∞
+                            text = if (uiState.focusDurationSeconds == 0) "∞" else "${uiState.focusDurationSeconds}s",
                             color = uiState.selectedFilm.accentColor,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
+                    // Slider: positions 1–30 = seconds, position 31 = ∞ (stored as 0)
+                    val sliderValue = if (uiState.focusDurationSeconds == 0) 31f else uiState.focusDurationSeconds.toFloat()
                     Slider(
-                        value = uiState.focusDurationSeconds.toFloat(),
-                        onValueChange = { onSetFocusDuration(it.toInt()) },
-                        valueRange = 1f..30f,
-                        steps = 28,
+                        value = sliderValue,
+                        onValueChange = { pos ->
+                            val seconds = if (pos.toInt() >= 31) 0 else pos.toInt()
+                            onSetFocusDuration(seconds)
+                        },
+                        valueRange = 1f..31f,
+                        steps = 29,
                         modifier = Modifier.fillMaxWidth().height(24.dp),
                         colors = SliderDefaults.colors(
                             thumbColor = uiState.selectedFilm.accentColor,
