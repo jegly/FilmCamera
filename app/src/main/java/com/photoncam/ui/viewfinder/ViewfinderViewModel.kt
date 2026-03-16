@@ -82,6 +82,7 @@ class ViewfinderViewModel @Inject constructor(
 
     private var evJob: Job? = null
     private var bindJob: Job? = null
+    private var zoomJob: Job? = null
     private var savedLensId: String? = null
 
     // Track work IDs we've already reported to the UI to avoid duplicate updates.
@@ -111,6 +112,12 @@ class ViewfinderViewModel @Inject constructor(
                     evIndex = saved.evIndex,
                     mainZoomRatio = saved.mainZoomRatio,
                 )
+            }
+            // Re-apply saved zoom in case bindCamera() already ran before settings loaded
+            // (race condition on cold start). Silently ignored if camera isn't bound yet —
+            // bindCamera() will call effectiveZoomRatio() which now has the correct value.
+            if (saved.mainZoomRatio != 1.0f) {
+                cameraManager.setZoomRatio(saved.mainZoomRatio)
             }
         }
         // Populate VIEW button with last gallery photo from previous sessions
@@ -273,9 +280,16 @@ class ViewfinderViewModel @Inject constructor(
     fun setMainZoomRatio(ratio: Float) {
         val clamped = ratio.coerceIn(1.0f, 8.0f)
         _uiState.update { it.copy(mainZoomRatio = clamped) }
-        viewModelScope.launch {
+        zoomJob?.cancel()
+        zoomJob = viewModelScope.launch {
             cameraManager.setZoomRatio(clamped)
-                .onFailure { e -> _uiState.update { it.copy(error = "Zoom failed: ${e.message}") } }
+                .onFailure { e ->
+                    val msg = e.message ?: ""
+                    // OperationCanceledException fires on every rapid slider drag — suppress it.
+                    if (!msg.contains("OperationCanceled") && !msg.contains("Camera not bound")) {
+                        _uiState.update { it.copy(error = "Zoom failed: $msg") }
+                    }
+                }
         }
     }
 
