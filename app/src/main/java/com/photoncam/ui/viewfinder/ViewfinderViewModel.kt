@@ -1,5 +1,10 @@
 package com.photoncam.ui.viewfinder
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.net.Uri
 import android.util.Range
 import androidx.camera.view.PreviewView
@@ -27,6 +32,8 @@ import com.photoncam.utils.AppSettings
 import com.photoncam.utils.GalleryExporter
 import com.photoncam.utils.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlin.math.atan2
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -79,10 +86,13 @@ data class ViewfinderUiState(
     val histogramData: FloatArray? = null,
     val cameraParamsEnabled: Boolean = false,
     val cameraParams: CameraParams? = null,
+    val levelEnabled: Boolean = false,
+    val levelAngle: Float = 0f,
 )
 
 @HiltViewModel
 class ViewfinderViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val cameraManager: CameraManager,
     private val workManager: WorkManager,
     private val galleryExporter: GalleryExporter,
@@ -97,6 +107,21 @@ class ViewfinderViewModel @Inject constructor(
     private var zoomJob: Job? = null
     private var focusJob: Job? = null
     private var savedLensId: String? = null
+
+    private val sensorManager by lazy {
+        context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    }
+
+    private val levelListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            // Roll angle around the camera optical axis: 0° = portrait upright, ±90° = landscape
+            val gx = event.values[0]
+            val gy = event.values[1]
+            val roll = Math.toDegrees(atan2(-gx.toDouble(), gy.toDouble())).toFloat()
+            _uiState.update { it.copy(levelAngle = roll) }
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
 
     // Track work IDs we've already reported to the UI to avoid duplicate updates.
     private val reportedWorkIds = mutableSetOf<UUID>()
@@ -127,11 +152,13 @@ class ViewfinderViewModel @Inject constructor(
                     focusDurationSeconds = saved.focusDurationSeconds,
                     histogramEnabled = saved.histogramEnabled,
                     cameraParamsEnabled = saved.cameraParamsEnabled,
+                    levelEnabled = saved.levelEnabled,
                 )
             }
             // Re-apply histogram enable state in case bindCamera() already ran
             cameraManager.setHistogramEnabled(saved.histogramEnabled)
             cameraManager.setCameraParamsEnabled(saved.cameraParamsEnabled)
+            if (saved.levelEnabled) registerLevelSensor()
 
             // Re-apply saved zoom in case bindCamera() already ran before settings loaded
             // (race condition on cold start). Silently ignored if camera isn't bound yet —
@@ -219,6 +246,7 @@ class ViewfinderViewModel @Inject constructor(
                     focusDurationSeconds = state.focusDurationSeconds,
                     histogramEnabled = state.histogramEnabled,
                     cameraParamsEnabled = state.cameraParamsEnabled,
+                    levelEnabled = state.levelEnabled,
                 )
             )
         }
@@ -532,6 +560,20 @@ class ViewfinderViewModel @Inject constructor(
         persistSettings()
     }
 
+    fun toggleLevel() {
+        val enabled = !_uiState.value.levelEnabled
+        _uiState.update { it.copy(levelEnabled = enabled) }
+        if (enabled) registerLevelSensor() else sensorManager.unregisterListener(levelListener)
+        persistSettings()
+    }
+
+    private fun registerLevelSensor() {
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            ?: return
+        sensorManager.registerListener(levelListener, sensor, SensorManager.SENSOR_DELAY_UI)
+    }
+
     fun saveAndCloseSettings() {
         persistSettings()
         _uiState.update { it.copy(showSettingsMenu = false) }
@@ -624,5 +666,6 @@ class ViewfinderViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         cameraManager.shutdown()
+        sensorManager.unregisterListener(levelListener)
     }
 }

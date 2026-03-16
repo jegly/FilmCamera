@@ -42,6 +42,8 @@ data class AppSettings(
     val mainZoomRatio: Float = 1.0f,
     val focusDurationSeconds: Int = 5,
     val histogramEnabled: Boolean = false,
+    val cameraParamsEnabled: Boolean = false,
+    val levelEnabled: Boolean = false,
 )
 
 @Singleton
@@ -69,6 +71,8 @@ class SettingsRepository @Inject constructor(
         val mainZoomRatio = floatPreferencesKey("main_zoom_ratio")
         val focusDurationSeconds = intPreferencesKey("focus_duration_seconds")
         val histogramEnabled = booleanPreferencesKey("histogram_enabled")
+        val cameraParamsEnabled = booleanPreferencesKey("camera_params_enabled")
+        val levelEnabled = booleanPreferencesKey("level_enabled")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -104,6 +108,8 @@ class SettingsRepository @Inject constructor(
             mainZoomRatio = prefs[Keys.mainZoomRatio] ?: 1.0f,
             focusDurationSeconds = prefs[Keys.focusDurationSeconds] ?: 5,
             histogramEnabled = prefs[Keys.histogramEnabled] ?: false,
+            cameraParamsEnabled = prefs[Keys.cameraParamsEnabled] ?: false,
+            levelEnabled = prefs[Keys.levelEnabled] ?: false,
         )
     }
 
@@ -133,6 +139,8 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.mainZoomRatio] = settings.mainZoomRatio
             prefs[Keys.focusDurationSeconds] = settings.focusDurationSeconds
             prefs[Keys.histogramEnabled] = settings.histogramEnabled
+            prefs[Keys.cameraParamsEnabled] = settings.cameraParamsEnabled
+            prefs[Keys.levelEnabled] = settings.levelEnabled
         }
     }
 }

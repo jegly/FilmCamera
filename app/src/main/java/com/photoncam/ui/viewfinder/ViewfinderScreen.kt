@@ -84,6 +84,9 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.photoncam.camera.CameraParams
 import com.photoncam.camera.LensInfo
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import com.photoncam.film.FilmCatalog
 import com.photoncam.film.FilmStock
 import com.photoncam.processing.DateImprintColor
@@ -388,6 +391,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onDateMenuTap = viewModel::toggleDateImprintMenu,
                 onToggleHistogram = viewModel::toggleHistogram,
                 onToggleCameraParams = viewModel::toggleCameraParams,
+                onToggleLevel = viewModel::toggleLevel,
                 onSave = viewModel::saveAndCloseSettings,
             )
         }
@@ -567,6 +571,14 @@ private fun ViewfinderWindow(
                                 .padding(bottom = 6.dp),
                         )
                     }
+                }
+
+                // Level overlay — center of viewfinder
+                if (uiState.levelEnabled) {
+                    LevelOverlay(
+                        angle = uiState.levelAngle,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
 
                 // Tap-to-focus indicator
@@ -1473,6 +1485,61 @@ private fun CameraParamsOverlay(params: CameraParams, modifier: Modifier = Modif
     }
 }
 
+// ── Level overlay ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun LevelOverlay(angle: Float, modifier: Modifier = Modifier) {
+    // Locked when within ±2° of any cardinal orientation (0, ±90, ±180, 270…)
+    val normalized = ((angle % 360f) + 360f) % 360f
+    val mod90 = normalized % 90f
+    val isLocked = mod90 < 2f || mod90 > 88f
+
+    val color by animateColorAsState(
+        targetValue = if (isLocked) Color(0xFF4CAF50) else Color(0xCCFFFFFF),
+        animationSpec = tween(200),
+        label = "levelColor",
+    )
+
+    Canvas(modifier = modifier) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val halfLen = 70.dp.toPx()
+        val gap = 10.dp.toPx()
+        val strokeW = 1.5.dp.toPx()
+        val dotR = 3.dp.toPx()
+
+        val rad = Math.toRadians(angle.toDouble())
+        val cosA = cos(rad).toFloat()
+        val sinA = sin(rad).toFloat()
+
+        // Left arm: from center+gap to center+halfLen (rotated)
+        drawLine(color,
+            start = Offset(cx - halfLen * cosA, cy - halfLen * sinA),
+            end   = Offset(cx - gap * cosA,     cy - gap * sinA),
+            strokeWidth = strokeW,
+        )
+        // Right arm
+        drawLine(color,
+            start = Offset(cx + gap * cosA,     cy + gap * sinA),
+            end   = Offset(cx + halfLen * cosA, cy + halfLen * sinA),
+            strokeWidth = strokeW,
+        )
+        // Small end ticks (perpendicular)
+        val tickLen = 6.dp.toPx()
+        listOf(-1f, 1f).forEach { side ->
+            val tx = cx + side * halfLen * cosA
+            val ty = cy + side * halfLen * sinA
+            drawLine(color,
+                start = Offset(tx - tickLen * sinA / 2, ty + tickLen * cosA / 2),
+                end   = Offset(tx + tickLen * sinA / 2, ty - tickLen * cosA / 2),
+                strokeWidth = strokeW,
+            )
+        }
+        // Center dot
+        drawCircle(color, radius = dotR, center = Offset(cx, cy))
+    }
+}
+
 // ── Settings Menu Sheet ───────────────────────────────────────────────────────
 
 @Composable
@@ -1483,6 +1550,7 @@ private fun SettingsMenuSheet(
     onDateMenuTap: () -> Unit,
     onToggleHistogram: () -> Unit,
     onToggleCameraParams: () -> Unit,
+    onToggleLevel: () -> Unit,
     onSave: () -> Unit,
 ) {
     Box(
@@ -1606,6 +1674,33 @@ private fun SettingsMenuSheet(
                     Switch(
                         checked = uiState.cameraParamsEnabled,
                         onCheckedChange = { onToggleCameraParams() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = uiState.selectedFilm.accentColor,
+                            checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),
+                            uncheckedThumbColor = Color(0xFF555555),
+                            uncheckedTrackColor = Color(0xFF222222),
+                        ),
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
+                // ── Level ─────────────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "LEVEL",
+                        color = Color(0xFF555555),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 2.sp,
+                    )
+                    Switch(
+                        checked = uiState.levelEnabled,
+                        onCheckedChange = { onToggleLevel() },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = uiState.selectedFilm.accentColor,
                             checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),
