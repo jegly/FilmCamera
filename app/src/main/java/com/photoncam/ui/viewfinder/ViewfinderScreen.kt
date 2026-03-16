@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -952,37 +953,25 @@ private fun FilmButton(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Button label lines
+            Column(
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.weight(1f),
+            ) {
                 Text(
-                    text = "FILM",
-                    color = film.accentColor.copy(alpha = 0.55f),
+                    text = film.brand.displayName.uppercase(),
+                    color = film.accentColor.copy(alpha = 0.65f),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 7.sp,
+                    fontSize = 10.sp,
                     letterSpacing = 1.sp,
                 )
                 Text(
-                    text = "SELECT",
+                    text = film.name,
                     color = film.accentColor,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.5.sp,
-                )
-                Text(
-                    text = "MENU",
-                    color = film.accentColor.copy(alpha = 0.55f),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 7.sp,
-                    letterSpacing = 1.sp,
-                )
-                // Film name below as subtitle
-                Text(
-                    text = "${film.brand.displayName}  ${film.name}",
-                    color = film.accentColor.copy(alpha = 0.40f),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 6.sp,
-                    maxLines = 1,
+                    maxLines = 2,
+                    lineHeight = 17.sp,
                     letterSpacing = 0.3.sp,
                 )
             }
@@ -990,7 +979,7 @@ private fun FilmButton(
                 film = film,
                 modifier = Modifier
                     .width(42.dp)
-                    .height(58.dp),
+                    .fillMaxHeight(),
             )
         }
     }
@@ -1009,13 +998,13 @@ private fun ActionButtonsGrid(
 ) {
     // 2-column layout: tall FilmButton on left, 3 stacked buttons on right
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        // Left: tall film selector button spanning 3 rows
+        // Left: film selector button — fills the height set by the right column
         FilmButton(
             film = uiState.selectedFilm,
-            modifier = Modifier.weight(1.6f),
+            modifier = Modifier.weight(1.6f).fillMaxHeight(),
             onClick = onFilmTap,
         )
         // Right: SETTINGS / VIEW / SHARE stacked
