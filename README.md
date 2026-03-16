@@ -11,6 +11,9 @@ An Android film camera emulator. Select a film stock, shoot through a vintage ra
 - **Flash** — hardware flash on back camera; screen flash (full white, max brightness) on front camera
 - **Grain & light leaks** — procedural per-shot analog artefacts
 - **Date imprint** — configurable 1990s-style timestamp: format, colour, font (LED 7-segment), size, position, glow, blur, opacity, layer repeat
+- **Level indicator** — gravity sensor overlay showing a rotating horizon bar; turns green when level at 0°/90°/180°/270°
+- **Grid overlays** — 3×3, 4×4, 9×9, Golden Ratio (φ), and Diagonal guide grids; toggled from settings
+- **Film canister button** — film selector shows brand/name in large text with an oval porthole showing the authentic canister body colour
 - **Favorites** — star any film stock, filter to favorites in the selector
 - **Shot counter** — cumulative shot count since install + per-roll frame counter (36 exp.)
 - **Lens selector** — ultrawide / main / telephoto / front camera via D-pad or tap
@@ -138,7 +141,7 @@ Burns a configurable 1990s-style timestamp into each photo — applied to raw pi
 
 | Parameter | Options | Default |
 |---|---|---|
-| Style | `CLASSIC` (DEC 24 '95) · `NUMERIC_US` · `NUMERIC_EU` · `YEAR_FIRST` · `WITH_TIME` · `YY_MM_DD` | CLASSIC |
+| Style | `CLASSIC` (DEC 24 '95) · `NUMERIC_US` · `NUMERIC_EU` · `YEAR_FIRST` · `WITH_TIME` · `YY_MM_DD` · `YYYY_MM_DD` | CLASSIC |
 | Colour | AMBER · RED · WHITE · GOLD · GREEN · CYAN | AMBER |
 | Font | LED (7-segment) · MONO · BOLD · SERIF · COND | LED |
 | Size | SMALL · MED · LARGE | MED |
@@ -153,7 +156,7 @@ Burns a configurable 1990s-style timestamp into each photo — applied to raw pi
 ## Build
 
 ```bash
-./gradlew assembleDebug    # → app/build/outputs/apk/debug/photoncam-v1.0.2.apk
+./gradlew assembleDebug    # → app/build/outputs/apk/debug/photoncam-v1.3.0.apk
 ./gradlew installDebug     # install on device / emulator
 ```
 
