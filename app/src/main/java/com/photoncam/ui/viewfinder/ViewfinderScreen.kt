@@ -836,6 +836,129 @@ private fun LensSelectorRow(
     }
 }
 
+// ── Film canister mini-preview ────────────────────────────────────────────────
+
+@Composable
+private fun FilmCanisterMini(film: FilmStock, modifier: Modifier = Modifier) {
+    val accent = film.accentColor
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cr = 2.dp.toPx()
+
+        // Body
+        val bL = w * 0.12f; val bR = w * 0.88f
+        val bT = h * 0.28f; val bB = h * 0.94f
+        drawRoundRect(
+            color = accent.copy(alpha = 0.20f),
+            topLeft = Offset(bL, bT),
+            size = Size(bR - bL, bB - bT),
+            cornerRadius = CornerRadius(cr),
+        )
+        drawRoundRect(
+            color = accent.copy(alpha = 0.55f),
+            topLeft = Offset(bL, bT),
+            size = Size(bR - bL, bB - bT),
+            cornerRadius = CornerRadius(cr),
+            style = Stroke(width = 0.8.dp.toPx()),
+        )
+        // Narrow label band (accent fill)
+        val bandT = bT + (bB - bT) * 0.25f
+        val bandB = bT + (bB - bT) * 0.65f
+        drawRect(
+            color = accent.copy(alpha = 0.30f),
+            topLeft = Offset(bL + 1f, bandT),
+            size = Size(bR - bL - 2f, bandB - bandT),
+        )
+        // Vertical stripe detail
+        for (i in listOf(0.35f, 0.65f)) {
+            drawLine(
+                color = accent.copy(alpha = 0.15f),
+                start = Offset(bL + (bR - bL) * i, bT + 2.dp.toPx()),
+                end = Offset(bL + (bR - bL) * i, bB - 2.dp.toPx()),
+                strokeWidth = 0.5.dp.toPx(),
+            )
+        }
+        // Top cap
+        val cW = (bR - bL) * 0.62f
+        val cL = (w - cW) / 2f
+        drawRoundRect(
+            color = Color(0xFF252525),
+            topLeft = Offset(cL, h * 0.06f),
+            size = Size(cW, bT - h * 0.06f + 1f),
+            cornerRadius = CornerRadius(cr * 0.5f),
+        )
+        drawRoundRect(
+            color = accent.copy(alpha = 0.35f),
+            topLeft = Offset(cL, h * 0.06f),
+            size = Size(cW, bT - h * 0.06f + 1f),
+            cornerRadius = CornerRadius(cr * 0.5f),
+            style = Stroke(width = 0.6.dp.toPx()),
+        )
+        // Leader slot
+        drawLine(
+            color = Color(0xFF0D0D0D),
+            start = Offset(w * 0.33f, bT + 1.5.dp.toPx()),
+            end = Offset(w * 0.67f, bT + 1.5.dp.toPx()),
+            strokeWidth = 1.5.dp.toPx(),
+        )
+    }
+}
+
+@Composable
+private fun FilmButton(
+    film: FilmStock,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF323232), Color(0xFF181818))))
+            .border(
+                1.dp,
+                Brush.verticalGradient(listOf(
+                    film.accentColor.copy(alpha = 0.50f),
+                    film.accentColor.copy(alpha = 0.22f),
+                )),
+                RoundedCornerShape(5.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            FilmCanisterMini(
+                film = film,
+                modifier = Modifier
+                    .width(18.dp)
+                    .height(26.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = film.brand.displayName.uppercase(),
+                    color = film.accentColor.copy(alpha = 0.65f),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 6.5.sp,
+                    letterSpacing = 0.8.sp,
+                )
+                Text(
+                    text = film.name,
+                    color = film.accentColor,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    letterSpacing = 0.3.sp,
+                )
+            }
+        }
+    }
+}
+
 // ── Action buttons ────────────────────────────────────────────────────────────
 
 @Composable
@@ -848,23 +971,22 @@ private fun ActionButtonsGrid(
     onShare: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        // Row 1: FILM
-        CamButton(
-            label = "${uiState.selectedFilm.brand.displayName}\n${uiState.selectedFilm.name}",
-            accentColor = uiState.selectedFilm.accentColor,
-            highlighted = true,
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onFilmTap,
-        )
-        // Row 2: SETTINGS
-        CamButton(
-            label = "SETT\nINGS",
-            accentColor = uiState.selectedFilm.accentColor,
-            highlighted = false,
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onSettingsTap,
-        )
-        // Row 3: VIEW + SHARE
+        // Row 1: FILM (with canister) + SETTINGS — same line
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            FilmButton(
+                film = uiState.selectedFilm,
+                modifier = Modifier.weight(1.6f),
+                onClick = onFilmTap,
+            )
+            CamButton(
+                label = "SETTINGS",
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = false,
+                modifier = Modifier.weight(1f),
+                onClick = onSettingsTap,
+            )
+        }
+        // Row 2: VIEW + SHARE
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             CamButton(
                 label = if (viewableUri != null) "VIEW  ◉" else "VIEW",
