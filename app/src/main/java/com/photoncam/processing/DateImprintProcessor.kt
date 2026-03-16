@@ -169,6 +169,7 @@ class DateImprintProcessor @Inject constructor(
             DateImprintStyle.YEAR_FIRST -> SimpleDateFormat("''yy MMM dd",  Locale.US).format(now).uppercase()
             DateImprintStyle.WITH_TIME  -> SimpleDateFormat("dd MMM HH:mm", Locale.US).format(now).uppercase()
             DateImprintStyle.YY_MM_DD   -> SimpleDateFormat("''yy MM dd",   Locale.US).format(now)
+            DateImprintStyle.YYYY_MM_DD -> SimpleDateFormat("yyyy MM dd",   Locale.US).format(now)
         }
     }
 }

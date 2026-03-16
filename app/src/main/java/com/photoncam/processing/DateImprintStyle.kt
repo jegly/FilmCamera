@@ -10,7 +10,8 @@ enum class DateImprintStyle {
     NUMERIC_EU,   // 24.12.95
     YEAR_FIRST,   // '95 DEC 24
     WITH_TIME,    // 24 DEC 14:30
-    YY_MM_DD;     // '26 03 13
+    YY_MM_DD,     // '26 03 13
+    YYYY_MM_DD;   // 2026 03 13
 
     /** Short preview label shown on the DATE button in the UI. */
     fun formatPreview(): String {
@@ -22,6 +23,7 @@ enum class DateImprintStyle {
             YEAR_FIRST  -> SimpleDateFormat("''yy MMM dd",  Locale.US).format(now).uppercase()
             WITH_TIME   -> SimpleDateFormat("dd MMM HH:mm", Locale.US).format(now).uppercase()
             YY_MM_DD    -> SimpleDateFormat("''yy MM dd",   Locale.US).format(now)
+            YYYY_MM_DD  -> SimpleDateFormat("yyyy MM dd",   Locale.US).format(now)
         }
     }
 
