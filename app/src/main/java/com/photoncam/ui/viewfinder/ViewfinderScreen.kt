@@ -55,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -352,6 +353,24 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onSelect = viewModel::selectFilm,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onDismiss = viewModel::toggleFilmSelector,
+            )
+        }
+
+        // Input-blocking scrim: sits above camera content, below the settings sheet.
+        // Consumes all pointer events in the Initial pass so nothing underneath
+        // (zoom slider, lens pills, viewfinder tap) is reachable while settings is open.
+        if (uiState.showSettingsMenu) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial)
+                                    .changes.forEach { it.consume() }
+                            }
+                        }
+                    },
             )
         }
 
