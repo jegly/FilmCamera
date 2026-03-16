@@ -169,3 +169,9 @@ Requires Android SDK, min API 26 (Android 8.0).
 
 - **DSEG7 font** — 7-segment LED display typeface used for the date imprint LED style.
   © 2020 Keshikan — [github.com/keshikan/DSEG](https://github.com/keshikan/DSEG) — SIL Open Font License 1.1.
+
+---
+
+## Disclaimer
+
+The trademarked names which may appear in the filenames of the HaldCLUT/FilmSimulation images are there for informational purposes only. They serve only to inform the user which film stock the given HaldCLUT/FilmSimulation image is designed to approximate. As there is no way to convey this information other than by using the trademarked name, we believe this constitutes fair use. Neither the publisher nor the authors are affiliated with or endorsed by the companies that own the trademarks.
