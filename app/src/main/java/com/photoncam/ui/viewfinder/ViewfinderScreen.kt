@@ -318,9 +318,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                         uiState = uiState,
                         viewableUri = viewableUri,
                         onFilmTap = viewModel::toggleFilmSelector,
-                        onDateMenuTap = viewModel::toggleDateImprintMenu,
                         onSettingsTap = viewModel::toggleSettingsMenu,
-                        onToggleLightLeak = viewModel::toggleLightLeak,
                         onView = onView,
                         onShare = onShare,
                     )
@@ -366,6 +364,8 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
             SettingsMenuSheet(
                 uiState = uiState,
                 onSetFocusDuration = viewModel::setFocusDuration,
+                onToggleLightLeak = viewModel::toggleLightLeak,
+                onDateMenuTap = viewModel::toggleDateImprintMenu,
                 onSave = viewModel::saveAndCloseSettings,
             )
         }
@@ -779,49 +779,27 @@ private fun ActionButtonsGrid(
     uiState: ViewfinderUiState,
     viewableUri: android.net.Uri?,
     onFilmTap: () -> Unit,
-    onDateMenuTap: () -> Unit,
     onSettingsTap: () -> Unit,
-    onToggleLightLeak: () -> Unit,
     onView: () -> Unit,
     onShare: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        // Row 1: FILM + LEAKS
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            CamButton(
-                label = "${uiState.selectedFilm.brand.displayName}\n${uiState.selectedFilm.name}",
-                accentColor = uiState.selectedFilm.accentColor,
-                highlighted = true,
-                modifier = Modifier.weight(1f),
-                onClick = onFilmTap,
-            )
-            CamButton(
-                label = if (uiState.lightLeakEnabled) "LEAKS\nON" else "LEAKS\nOFF",
-                accentColor = uiState.selectedFilm.accentColor,
-                highlighted = uiState.lightLeakEnabled,
-                modifier = Modifier.weight(1f),
-                onClick = onToggleLightLeak,
-            )
-        }
-        // Row 2: DATE stamp menu + SETTINGS
-        val dateSummary = if (!uiState.dateImprintEnabled) "DATE STAMP\nOFF"
-        else "DATE  ${uiState.dateImprintStyle.formatPreview()}\n${uiState.dateImprintColor.label}  ${uiState.dateImprintPosition.label}"
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            CamButton(
-                label = dateSummary,
-                accentColor = uiState.selectedFilm.accentColor,
-                highlighted = uiState.dateImprintEnabled,
-                modifier = Modifier.weight(1f),
-                onClick = onDateMenuTap,
-            )
-            CamButton(
-                label = "SETT\nINGS",
-                accentColor = uiState.selectedFilm.accentColor,
-                highlighted = false,
-                modifier = Modifier.weight(0.55f),
-                onClick = onSettingsTap,
-            )
-        }
+        // Row 1: FILM
+        CamButton(
+            label = "${uiState.selectedFilm.brand.displayName}\n${uiState.selectedFilm.name}",
+            accentColor = uiState.selectedFilm.accentColor,
+            highlighted = true,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onFilmTap,
+        )
+        // Row 2: SETTINGS
+        CamButton(
+            label = "SETT\nINGS",
+            accentColor = uiState.selectedFilm.accentColor,
+            highlighted = false,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onSettingsTap,
+        )
         // Row 3: VIEW + SHARE
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             CamButton(
@@ -1383,6 +1361,8 @@ private fun DateChip(
 private fun SettingsMenuSheet(
     uiState: ViewfinderUiState,
     onSetFocusDuration: (Int) -> Unit,
+    onToggleLightLeak: () -> Unit,
+    onDateMenuTap: () -> Unit,
     onSave: () -> Unit,
 ) {
     Box(
@@ -1435,6 +1415,46 @@ private fun SettingsMenuSheet(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // ── Light leaks ───────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "LIGHT LEAKS",
+                        color = Color(0xFF555555),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 2.sp,
+                    )
+                    Switch(
+                        checked = uiState.lightLeakEnabled,
+                        onCheckedChange = { onToggleLightLeak() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = uiState.selectedFilm.accentColor,
+                            checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),
+                            uncheckedThumbColor = Color(0xFF555555),
+                            uncheckedTrackColor = Color(0xFF222222),
+                        ),
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
+                // ── Date imprint ──────────────────────────────────────────────
+                val dateSummary = if (!uiState.dateImprintEnabled) "DATE STAMP  OFF"
+                else "DATE  ${uiState.dateImprintStyle.formatPreview()}  ${uiState.dateImprintColor.label}  ${uiState.dateImprintPosition.label}"
+                CamButton(
+                    label = dateSummary,
+                    accentColor = uiState.selectedFilm.accentColor,
+                    highlighted = uiState.dateImprintEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onDateMenuTap,
+                )
+
+                HorizontalDivider(color = Color(0xFF222222))
+
                 // ── Focus duration ────────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
