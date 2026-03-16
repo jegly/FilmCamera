@@ -392,6 +392,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onToggleHistogram = viewModel::toggleHistogram,
                 onToggleCameraParams = viewModel::toggleCameraParams,
                 onToggleLevel = viewModel::toggleLevel,
+                onSetGridMode = viewModel::setGridMode,
                 onSave = viewModel::saveAndCloseSettings,
             )
         }
@@ -571,6 +572,11 @@ private fun ViewfinderWindow(
                                 .padding(bottom = 6.dp),
                         )
                     }
+                }
+
+                // Grid overlay
+                if (uiState.gridMode != GridMode.OFF) {
+                    GridOverlay(mode = uiState.gridMode, modifier = Modifier.fillMaxSize())
                 }
 
                 // Level overlay — center of viewfinder
@@ -1485,6 +1491,69 @@ private fun CameraParamsOverlay(params: CameraParams, modifier: Modifier = Modif
     }
 }
 
+// ── Grid overlay ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun GridOverlay(mode: GridMode, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val lineColor = Color(0x55FFFFFF)
+        val strokeW   = 0.7.dp.toPx()
+
+        when (mode) {
+            GridMode.THIRDS -> {
+                for (i in 1..2) {
+                    drawLine(lineColor, Offset(w * i / 3f, 0f), Offset(w * i / 3f, h), strokeW)
+                    drawLine(lineColor, Offset(0f, h * i / 3f), Offset(w, h * i / 3f), strokeW)
+                }
+            }
+            GridMode.SQUARE -> {
+                for (i in 1..3) {
+                    drawLine(lineColor, Offset(w * i / 4f, 0f), Offset(w * i / 4f, h), strokeW)
+                    drawLine(lineColor, Offset(0f, h * i / 4f), Offset(w, h * i / 4f), strokeW)
+                }
+            }
+            GridMode.NINES -> {
+                for (i in 1..8) {
+                    val thin = if (i % 3 == 0) lineColor.copy(alpha = 0.45f) else lineColor.copy(alpha = 0.25f)
+                    drawLine(thin, Offset(w * i / 9f, 0f), Offset(w * i / 9f, h), strokeW)
+                    drawLine(thin, Offset(0f, h * i / 9f), Offset(w, h * i / 9f), strokeW)
+                }
+                // Emphasize the rule-of-thirds lines within the 9×9
+                for (i in listOf(3, 6)) {
+                    drawLine(lineColor, Offset(w * i / 9f, 0f), Offset(w * i / 9f, h), strokeW)
+                    drawLine(lineColor, Offset(0f, h * i / 9f), Offset(w, h * i / 9f), strokeW)
+                }
+            }
+            GridMode.GOLDEN -> {
+                // Golden ratio: 1/(1+φ) ≈ 0.3820
+                val phi = 0.3820f
+                for (r in listOf(phi, 1f - phi)) {
+                    drawLine(lineColor, Offset(w * r, 0f), Offset(w * r, h), strokeW)
+                    drawLine(lineColor, Offset(0f, h * r), Offset(w, h * r), strokeW)
+                }
+            }
+            GridMode.DIAGONAL -> {
+                // Two main corner-to-corner diagonals
+                drawLine(lineColor, Offset(0f, 0f), Offset(w, h), strokeW)
+                drawLine(lineColor, Offset(w, 0f), Offset(0f, h), strokeW)
+                // Four rule-of-thirds diagonal helpers (corner to 1/3 edges)
+                val dim = lineColor.copy(alpha = 0.30f)
+                drawLine(dim, Offset(0f, 0f), Offset(w, h / 3f), strokeW)
+                drawLine(dim, Offset(0f, 0f), Offset(w / 3f, h), strokeW)
+                drawLine(dim, Offset(w, 0f), Offset(0f, h / 3f), strokeW)
+                drawLine(dim, Offset(w, 0f), Offset(w * 2f / 3f, h), strokeW)
+                drawLine(dim, Offset(0f, h), Offset(w, h * 2f / 3f), strokeW)
+                drawLine(dim, Offset(0f, h), Offset(w / 3f, 0f), strokeW)
+                drawLine(dim, Offset(w, h), Offset(0f, h * 2f / 3f), strokeW)
+                drawLine(dim, Offset(w, h), Offset(w * 2f / 3f, 0f), strokeW)
+            }
+            GridMode.OFF -> {}
+        }
+    }
+}
+
 // ── Level overlay ─────────────────────────────────────────────────────────────
 
 @Composable
@@ -1552,6 +1621,7 @@ private fun SettingsMenuSheet(
     onToggleHistogram: () -> Unit,
     onToggleCameraParams: () -> Unit,
     onToggleLevel: () -> Unit,
+    onSetGridMode: (GridMode) -> Unit,
     onSave: () -> Unit,
 ) {
     Box(
@@ -1709,6 +1779,33 @@ private fun SettingsMenuSheet(
                             uncheckedTrackColor = Color(0xFF222222),
                         ),
                     )
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
+                // ── Grid ──────────────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "GRID",
+                        color = Color(0xFF555555),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 2.sp,
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
+                    ) {
+                        items(GridMode.entries) { mode ->
+                            DateChip(
+                                label = mode.label,
+                                selected = uiState.gridMode == mode,
+                                enabled = true,
+                                accentColor = uiState.selectedFilm.accentColor,
+                                onClick = { onSetGridMode(mode) },
+                            )
+                        }
+                    }
                 }
 
                 HorizontalDivider(color = Color(0xFF222222))

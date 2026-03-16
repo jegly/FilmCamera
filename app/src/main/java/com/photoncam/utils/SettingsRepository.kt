@@ -44,6 +44,7 @@ data class AppSettings(
     val histogramEnabled: Boolean = false,
     val cameraParamsEnabled: Boolean = false,
     val levelEnabled: Boolean = false,
+    val gridMode: String = "OFF",
 )
 
 @Singleton
@@ -73,6 +74,7 @@ class SettingsRepository @Inject constructor(
         val histogramEnabled = booleanPreferencesKey("histogram_enabled")
         val cameraParamsEnabled = booleanPreferencesKey("camera_params_enabled")
         val levelEnabled = booleanPreferencesKey("level_enabled")
+        val gridMode = stringPreferencesKey("grid_mode")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -110,6 +112,7 @@ class SettingsRepository @Inject constructor(
             histogramEnabled = prefs[Keys.histogramEnabled] ?: false,
             cameraParamsEnabled = prefs[Keys.cameraParamsEnabled] ?: false,
             levelEnabled = prefs[Keys.levelEnabled] ?: false,
+            gridMode = prefs[Keys.gridMode] ?: "OFF",
         )
     }
 
@@ -141,6 +144,7 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.histogramEnabled] = settings.histogramEnabled
             prefs[Keys.cameraParamsEnabled] = settings.cameraParamsEnabled
             prefs[Keys.levelEnabled] = settings.levelEnabled
+            prefs[Keys.gridMode] = settings.gridMode
         }
     }
 }

@@ -46,6 +46,15 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
+enum class GridMode(val label: String) {
+    OFF("OFF"),
+    THIRDS("3×3"),
+    SQUARE("4×4"),
+    NINES("9×9"),
+    GOLDEN("PHI"),
+    DIAGONAL("DIAG"),
+}
+
 /** Tap-to-focus indicator state. [focused] flips to true once AF converges. */
 data class FocusPoint(val x: Float, val y: Float, val focused: Boolean = false)
 
@@ -88,6 +97,7 @@ data class ViewfinderUiState(
     val cameraParams: CameraParams? = null,
     val levelEnabled: Boolean = false,
     val levelAngle: Float = 0f,
+    val gridMode: GridMode = GridMode.OFF,
 )
 
 @HiltViewModel
@@ -154,6 +164,7 @@ class ViewfinderViewModel @Inject constructor(
                     histogramEnabled = saved.histogramEnabled,
                     cameraParamsEnabled = saved.cameraParamsEnabled,
                     levelEnabled = saved.levelEnabled,
+                    gridMode = runCatching { GridMode.valueOf(saved.gridMode) }.getOrDefault(GridMode.OFF),
                 )
             }
             // Re-apply histogram enable state in case bindCamera() already ran
@@ -248,6 +259,7 @@ class ViewfinderViewModel @Inject constructor(
                     histogramEnabled = state.histogramEnabled,
                     cameraParamsEnabled = state.cameraParamsEnabled,
                     levelEnabled = state.levelEnabled,
+                    gridMode = state.gridMode.name,
                 )
             )
         }
@@ -558,6 +570,11 @@ class ViewfinderViewModel @Inject constructor(
         val enabled = !_uiState.value.cameraParamsEnabled
         _uiState.update { it.copy(cameraParamsEnabled = enabled) }
         cameraManager.setCameraParamsEnabled(enabled)
+        persistSettings()
+    }
+
+    fun setGridMode(mode: GridMode) {
+        _uiState.update { it.copy(gridMode = mode) }
         persistSettings()
     }
 
