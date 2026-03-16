@@ -366,6 +366,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onSetFocusDuration = viewModel::setFocusDuration,
                 onToggleLightLeak = viewModel::toggleLightLeak,
                 onDateMenuTap = viewModel::toggleDateImprintMenu,
+                onToggleHistogram = viewModel::toggleHistogram,
                 onSave = viewModel::saveAndCloseSettings,
             )
         }
@@ -519,6 +520,18 @@ private fun ViewfinderWindow(
                             color = AmberLcd.copy(alpha = 0.9f),
                             fontFamily = FontFamily.Monospace,
                             fontSize = 9.sp,
+                        )
+                    }
+                }
+
+                // Histogram overlay — bottom-right
+                if (uiState.histogramEnabled) {
+                    uiState.histogramData?.let { data ->
+                        HistogramOverlay(
+                            data = data,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(6.dp),
                         )
                     }
                 }
@@ -1355,6 +1368,47 @@ private fun DateChip(
     }
 }
 
+// ── Histogram overlay ─────────────────────────────────────────────────────────
+
+@Composable
+private fun HistogramOverlay(data: FloatArray, modifier: Modifier = Modifier) {
+    Canvas(
+        modifier = modifier
+            .width(112.dp)
+            .height(56.dp)
+            .clip(RoundedCornerShape(3.dp)),
+    ) {
+        // Background
+        drawRect(Color(0xCC000000))
+
+        val padH = 4.dp.toPx()
+        val padV = 4.dp.toPx()
+        val drawW = size.width - padH * 2
+        val drawH = size.height - padV * 2
+        val barW = drawW / 256f
+
+        // Filled area histogram (mountain silhouette)
+        val path = androidx.compose.ui.graphics.Path()
+        path.moveTo(padH, size.height - padV)
+        for (i in 0 until 256) {
+            val x = padH + i * barW
+            val y = size.height - padV - data[i] * drawH
+            path.lineTo(x, y)
+        }
+        path.lineTo(padH + drawW, size.height - padV)
+        path.close()
+        drawPath(path, Color(0xCCFFFFFF))
+
+        // Baseline
+        drawLine(
+            color = Color(0x44FFFFFF),
+            start = androidx.compose.ui.geometry.Offset(padH, size.height - padV),
+            end = androidx.compose.ui.geometry.Offset(size.width - padH, size.height - padV),
+            strokeWidth = 0.5.dp.toPx(),
+        )
+    }
+}
+
 // ── Settings Menu Sheet ───────────────────────────────────────────────────────
 
 @Composable
@@ -1363,6 +1417,7 @@ private fun SettingsMenuSheet(
     onSetFocusDuration: (Int) -> Unit,
     onToggleLightLeak: () -> Unit,
     onDateMenuTap: () -> Unit,
+    onToggleHistogram: () -> Unit,
     onSave: () -> Unit,
 ) {
     Box(
@@ -1431,6 +1486,33 @@ private fun SettingsMenuSheet(
                     Switch(
                         checked = uiState.lightLeakEnabled,
                         onCheckedChange = { onToggleLightLeak() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = uiState.selectedFilm.accentColor,
+                            checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),
+                            uncheckedThumbColor = Color(0xFF555555),
+                            uncheckedTrackColor = Color(0xFF222222),
+                        ),
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
+                // ── Histogram ─────────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "HISTOGRAM",
+                        color = Color(0xFF555555),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 2.sp,
+                    )
+                    Switch(
+                        checked = uiState.histogramEnabled,
+                        onCheckedChange = { onToggleHistogram() },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = uiState.selectedFilm.accentColor,
                             checkedTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.35f),

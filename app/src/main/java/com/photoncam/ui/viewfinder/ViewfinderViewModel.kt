@@ -74,6 +74,8 @@ data class ViewfinderUiState(
     val focusPoint: FocusPoint? = null,
     val showSettingsMenu: Boolean = false,
     val focusDurationSeconds: Int = 5,
+    val histogramEnabled: Boolean = false,
+    val histogramData: FloatArray? = null,
 )
 
 @HiltViewModel
@@ -120,8 +122,12 @@ class ViewfinderViewModel @Inject constructor(
                     evIndex = saved.evIndex,
                     mainZoomRatio = saved.mainZoomRatio,
                     focusDurationSeconds = saved.focusDurationSeconds,
+                    histogramEnabled = saved.histogramEnabled,
                 )
             }
+            // Re-apply histogram enable state in case bindCamera() already ran
+            cameraManager.setHistogramEnabled(saved.histogramEnabled)
+
             // Re-apply saved zoom in case bindCamera() already ran before settings loaded
             // (race condition on cold start). Silently ignored if camera isn't bound yet —
             // bindCamera() will call effectiveZoomRatio() which now has the correct value.
@@ -129,6 +135,13 @@ class ViewfinderViewModel @Inject constructor(
                 cameraManager.setZoomRatio(saved.mainZoomRatio)
             }
         }
+        // Collect histogram data from CameraManager and push to UI state
+        viewModelScope.launch {
+            cameraManager.histogramData.collect { data ->
+                _uiState.update { it.copy(histogramData = data) }
+            }
+        }
+
         // Populate VIEW button with last gallery photo from previous sessions
         viewModelScope.launch(Dispatchers.IO) {
             val uri = galleryExporter.getLatestPhotoUri()
@@ -192,6 +205,7 @@ class ViewfinderViewModel @Inject constructor(
                     flashEnabled = state.flashEnabled,
                     mainZoomRatio = state.mainZoomRatio,
                     focusDurationSeconds = state.focusDurationSeconds,
+                    histogramEnabled = state.histogramEnabled,
                 )
             )
         }
@@ -489,6 +503,13 @@ class ViewfinderViewModel @Inject constructor(
     fun setFocusDuration(seconds: Int) {
         // 0 = infinite (∞ position on slider), 1–30 = seconds
         _uiState.update { it.copy(focusDurationSeconds = seconds.coerceIn(0, 30)) }
+    }
+
+    fun toggleHistogram() {
+        val enabled = !_uiState.value.histogramEnabled
+        _uiState.update { it.copy(histogramEnabled = enabled) }
+        cameraManager.setHistogramEnabled(enabled)
+        persistSettings()
     }
 
     fun saveAndCloseSettings() {

@@ -16,9 +16,14 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.MeteringPoint
 import androidx.camera.core.ExposureState
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -50,6 +55,12 @@ class CameraManager @Inject constructor(
     private var imageCapture: ImageCapture? = null
     @Volatile private var camera: Camera? = null
     private var cachedProvider: ProcessCameraProvider? = null
+
+    // ── Histogram ─────────────────────────────────────────────────────────────
+    private val _histogramData = MutableStateFlow<FloatArray?>(null)
+    val histogramData: StateFlow<FloatArray?> = _histogramData.asStateFlow()
+    @Volatile private var histogramEnabled = false
+    private var lastHistogramMs = 0L  // throttle to ~10 fps
 
     val isBound: Boolean get() = camera != null
     val currentLensFacing: Int? get() = camera?.cameraInfo?.lensFacing
@@ -217,8 +228,37 @@ class CameraManager @Inject constructor(
                 camera = null
                 cameraProvider.unbindAll()
 
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(320, 240),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                                )
+                            )
+                            .build()
+                    )
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(cameraExecutor) { image ->
+                            try {
+                                if (histogramEnabled) {
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastHistogramMs >= 100L) {
+                                        lastHistogramMs = now
+                                        _histogramData.value = computeLuminanceHistogram(image)
+                                    }
+                                }
+                            } finally {
+                                image.close()
+                            }
+                        }
+                    }
+
                 camera = cameraProvider.bindToLifecycle(
-                    lifecycleOwner, selector, preview, imageCapture!!,
+                    lifecycleOwner, selector, preview, imageCapture!!, imageAnalysis,
                 )
 
                 // Start tracking device orientation so targetRotation stays current.
@@ -364,6 +404,34 @@ class CameraManager @Inject constructor(
         val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val dir = File(context.cacheDir, "captures").apply { mkdirs() }
         return File(dir, "RAW_$ts.jpg")
+    }
+
+    // ── Histogram ─────────────────────────────────────────────────────────────
+
+    fun setHistogramEnabled(enabled: Boolean) {
+        histogramEnabled = enabled
+        if (!enabled) _histogramData.value = null
+    }
+
+    private fun computeLuminanceHistogram(image: ImageProxy): FloatArray {
+        val plane = image.planes[0]   // Y plane (luminance)
+        val buffer = plane.buffer
+        val rowStride = plane.rowStride
+        val pixelStride = plane.pixelStride
+        val width = image.width
+        val height = image.height
+        val counts = IntArray(256)
+        var rowStart = 0
+        for (y in 0 until height) {
+            var i = rowStart
+            for (x in 0 until width) {
+                counts[buffer[i].toInt() and 0xFF]++
+                i += pixelStride
+            }
+            rowStart += rowStride
+        }
+        val max = counts.max().toFloat().coerceAtLeast(1f)
+        return FloatArray(256) { counts[it] / max }
     }
 
     // ── Tap-to-focus ──────────────────────────────────────────────────────────

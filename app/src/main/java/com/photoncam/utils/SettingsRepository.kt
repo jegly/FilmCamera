@@ -41,6 +41,7 @@ data class AppSettings(
     val flashEnabled: Boolean = false,
     val mainZoomRatio: Float = 1.0f,
     val focusDurationSeconds: Int = 5,
+    val histogramEnabled: Boolean = false,
 )
 
 @Singleton
@@ -67,6 +68,7 @@ class SettingsRepository @Inject constructor(
         val flashEnabled = booleanPreferencesKey("flash_enabled")
         val mainZoomRatio = floatPreferencesKey("main_zoom_ratio")
         val focusDurationSeconds = intPreferencesKey("focus_duration_seconds")
+        val histogramEnabled = booleanPreferencesKey("histogram_enabled")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -101,6 +103,7 @@ class SettingsRepository @Inject constructor(
             flashEnabled = prefs[Keys.flashEnabled] ?: false,
             mainZoomRatio = prefs[Keys.mainZoomRatio] ?: 1.0f,
             focusDurationSeconds = prefs[Keys.focusDurationSeconds] ?: 5,
+            histogramEnabled = prefs[Keys.histogramEnabled] ?: false,
         )
     }
 
@@ -129,6 +132,7 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.flashEnabled] = settings.flashEnabled
             prefs[Keys.mainZoomRatio] = settings.mainZoomRatio
             prefs[Keys.focusDurationSeconds] = settings.focusDurationSeconds
+            prefs[Keys.histogramEnabled] = settings.histogramEnabled
         }
     }
 }
