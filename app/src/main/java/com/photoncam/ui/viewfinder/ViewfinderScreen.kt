@@ -952,20 +952,36 @@ private fun FilmButton(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Button label lines
                 Text(
-                    text = film.brand.displayName.uppercase(),
-                    color = film.accentColor.copy(alpha = 0.65f),
+                    text = "FILM",
+                    color = film.accentColor.copy(alpha = 0.55f),
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 6.5.sp,
-                    letterSpacing = 0.8.sp,
+                    fontSize = 7.sp,
+                    letterSpacing = 1.sp,
                 )
                 Text(
-                    text = film.name,
+                    text = "SELECT",
                     color = film.accentColor,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp,
+                )
+                Text(
+                    text = "MENU",
+                    color = film.accentColor.copy(alpha = 0.55f),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 7.sp,
+                    letterSpacing = 1.sp,
+                )
+                // Film name below as subtitle
+                Text(
+                    text = "${film.brand.displayName}  ${film.name}",
+                    color = film.accentColor.copy(alpha = 0.40f),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 6.sp,
                     maxLines = 1,
                     letterSpacing = 0.3.sp,
                 )
@@ -974,7 +990,7 @@ private fun FilmButton(
                 film = film,
                 modifier = Modifier
                     .width(42.dp)
-                    .height(30.dp),
+                    .height(58.dp),
             )
         }
     }
@@ -991,30 +1007,35 @@ private fun ActionButtonsGrid(
     onView: () -> Unit,
     onShare: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        // Row 1: FILM (with canister) + SETTINGS — same line
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            FilmButton(
-                film = uiState.selectedFilm,
-                modifier = Modifier.weight(1.6f),
-                onClick = onFilmTap,
-            )
+    // 2-column layout: tall FilmButton on left, 3 stacked buttons on right
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        // Left: tall film selector button spanning 3 rows
+        FilmButton(
+            film = uiState.selectedFilm,
+            modifier = Modifier.weight(1.6f),
+            onClick = onFilmTap,
+        )
+        // Right: SETTINGS / VIEW / SHARE stacked
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
             CamButton(
                 label = "SETTINGS",
                 accentColor = uiState.selectedFilm.accentColor,
                 highlighted = false,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 onClick = onSettingsTap,
             )
-        }
-        // Row 2: VIEW + SHARE
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             CamButton(
                 label = if (viewableUri != null) "VIEW  ◉" else "VIEW",
                 accentColor = uiState.selectedFilm.accentColor,
                 highlighted = viewableUri != null,
                 enabled = viewableUri != null,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 onClick = onView,
             )
             CamButton(
@@ -1022,7 +1043,7 @@ private fun ActionButtonsGrid(
                 accentColor = uiState.selectedFilm.accentColor,
                 highlighted = viewableUri != null,
                 enabled = viewableUri != null,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 onClick = onShare,
             )
         }
