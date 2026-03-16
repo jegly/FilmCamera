@@ -197,7 +197,9 @@ class ViewfinderViewModel @Inject constructor(
         if (pendingLens?.zoomRatio != null && cameraManager.isBound &&
             cameraManager.currentLensFacing == androidx.camera.core.CameraSelector.LENS_FACING_BACK) {
             viewModelScope.launch {
-                cameraManager.setZoomRatio(pendingLens.zoomRatio)
+                // Use effectiveZoomRatio() so zoom_main respects the slider (mainZoomRatio)
+                // rather than the fixed 1.0f stored in LensInfo.zoomRatio.
+                cameraManager.setZoomRatio(effectiveZoomRatio())
                     .onFailure { e -> _uiState.update { it.copy(error = "Zoom failed: ${e.message}") } }
             }
             return
