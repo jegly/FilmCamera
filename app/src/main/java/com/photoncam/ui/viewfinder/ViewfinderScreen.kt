@@ -71,6 +71,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
@@ -836,87 +837,114 @@ private fun LensSelectorRow(
     }
 }
 
-// ── Film canister porthole (top-down interior view) ───────────────────────────
+// ── Film canister porthole (side-view through oval window) ───────────────────
 
 @Composable
 private fun FilmCanisterWindow(film: FilmStock, modifier: Modifier = Modifier) {
     val accent = film.accentColor
-    Canvas(modifier = modifier) {
-        val cx = size.width / 2f
-        val cy = size.height / 2f
-        val rx = size.width / 2f
-        val ry = size.height / 2f
+    // Derive a slightly darker shade for cylinder shading edges
+    val accentDark = accent.copy(
+        red   = (accent.red   * 0.45f).coerceIn(0f, 1f),
+        green = (accent.green * 0.45f).coerceIn(0f, 1f),
+        blue  = (accent.blue  * 0.45f).coerceIn(0f, 1f),
+        alpha = 1f,
+    )
+    Canvas(modifier = modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))) {
+        val w = size.width
+        val h = size.height
 
-        // ── Interior: dark canister inside ──────────────────────────────────
-        drawOval(
-            color = Color(0xFF0E0E0E),
-            topLeft = Offset(0f, 0f),
-            size = Size(size.width, size.height),
-        )
-
-        // ── Film roll layers (concentric ovals, accent-tinted) ───────────────
-        val layers = listOf(
-            0.88f to 0.18f,  // outermost film roll edge
-            0.74f to 0.22f,
-            0.60f to 0.20f,
-            0.46f to 0.18f,
-        )
-        for ((scale, alpha) in layers) {
-            drawOval(
-                color = accent.copy(alpha = alpha),
-                topLeft = Offset(cx - rx * scale, cy - ry * scale),
-                size = Size(rx * scale * 2f, ry * scale * 2f),
-            )
-            drawOval(
-                color = accent.copy(alpha = alpha * 1.8f),
-                topLeft = Offset(cx - rx * scale, cy - ry * scale),
-                size = Size(rx * scale * 2f, ry * scale * 2f),
-                style = Stroke(width = 0.7.dp.toPx()),
-            )
+        // ── Clip drawing to the oval porthole shape ──────────────────────────
+        val ovalPath = androidx.compose.ui.graphics.Path().apply {
+            addOval(androidx.compose.ui.geometry.Rect(0f, 0f, w, h))
         }
+        clipPath(ovalPath) {
 
-        // ── Spool hub (dark center disk) ────────────────────────────────────
-        val hubRx = rx * 0.28f
-        val hubRy = ry * 0.28f
-        drawOval(
-            color = Color(0xFF1A1A1A),
-            topLeft = Offset(cx - hubRx, cy - hubRy),
-            size = Size(hubRx * 2f, hubRy * 2f),
-        )
-        // Hub spokes (4 radial lines)
-        for (i in 0 until 4) {
-            val angle = Math.toRadians(i * 45.0)
+            // 1. Main canister body color — fills the whole oval
+            drawRect(color = accent)
+
+            // 2. Cylindrical shading: dark left and right edges (wrap-around effect)
+            val gradW = w * 0.30f
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(accentDark, Color.Transparent),
+                    startX = 0f,
+                    endX = gradW,
+                ),
+                topLeft = Offset(0f, 0f),
+                size = Size(gradW, h),
+            )
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.Transparent, accentDark),
+                    startX = w - gradW,
+                    endX = w,
+                ),
+                topLeft = Offset(w - gradW, 0f),
+                size = Size(gradW, h),
+            )
+
+            // 3. Film strip sprocket edge — dark strip on the left ~18% wide
+            val stripW = w * 0.18f
+            drawRect(
+                color = Color(0xFF111111),
+                topLeft = Offset(0f, 0f),
+                size = Size(stripW, h),
+            )
+            // Sprocket holes (2 holes, small rounded rects)
+            val holeW = stripW * 0.55f
+            val holeH = h * 0.18f
+            val holeX = (stripW - holeW) / 2f
+            for (yFrac in listOf(0.25f, 0.65f)) {
+                drawRoundRect(
+                    color = Color(0xFF2E2E2E),
+                    topLeft = Offset(holeX, h * yFrac - holeH / 2f),
+                    size = Size(holeW, holeH),
+                    cornerRadius = CornerRadius(holeW * 0.3f),
+                )
+            }
+            // Separation line between strip and body
             drawLine(
-                color = accent.copy(alpha = 0.30f),
-                start = Offset(cx, cy),
-                end = Offset(cx + (hubRx * cos(angle)).toFloat(), cy + (hubRy * sin(angle)).toFloat()),
-                strokeWidth = 0.6.dp.toPx(),
+                color = Color.Black.copy(alpha = 0.55f),
+                start = Offset(stripW, 0f),
+                end   = Offset(stripW, h),
+                strokeWidth = 0.8.dp.toPx(),
+            )
+
+            // 4. Center highlight — subtle bright band to sell the cylinder curve
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.White.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.25f),
+                        Color.White.copy(alpha = 0.18f),
+                        Color.Transparent,
+                    ),
+                    startX = w * 0.38f,
+                    endX   = w * 0.72f,
+                ),
+                topLeft = Offset(0f, 0f),
+                size = Size(w, h),
             )
         }
-        // Hub center dot
-        drawCircle(
-            color = Color(0xFF2A2A2A),
-            radius = rx * 0.09f,
-            center = Offset(cx, cy),
-        )
 
-        // ── Oval bezel (canister wall ring) ─────────────────────────────────
+        // ── Oval porthole bezel (drawn outside clip so it overlays the edge) ──
         drawOval(
-            color = accent.copy(alpha = 0.55f),
+            color = Color(0xFF888888),
             topLeft = Offset(0f, 0f),
-            size = Size(size.width, size.height),
-            style = Stroke(width = 1.5.dp.toPx()),
+            size = Size(w, h),
+            style = Stroke(width = 1.2.dp.toPx()),
         )
 
-        // ── Glass reflection highlight (top-left arc) ───────────────────────
+        // ── Glass reflection arc (top-left glint) ────────────────────────────
         drawArc(
-            color = Color.White.copy(alpha = 0.18f),
-            startAngle = 200f,
-            sweepAngle = 70f,
+            color = Color.White.copy(alpha = 0.35f),
+            startAngle = 195f,
+            sweepAngle = 55f,
             useCenter = false,
-            topLeft = Offset(rx * 0.12f, ry * 0.08f),
-            size = Size(rx * 1.1f, ry * 0.9f),
-            style = Stroke(width = 1.8.dp.toPx()),
+            topLeft = Offset(w * 0.08f, h * 0.06f),
+            size = Size(w * 0.55f, h * 0.55f),
+            style = Stroke(width = 1.5.dp.toPx()),
         )
     }
 }
