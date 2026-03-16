@@ -1509,8 +1509,8 @@ private fun LevelOverlay(angle: Float, modifier: Modifier = Modifier) {
         val tickLen = 6.dp.toPx()
         val dotR    = 3.dp.toPx()
 
-        // Negate the device tilt so the bar stays aligned with the real-world horizon
-        val rad  = Math.toRadians((-angle).toDouble())
+        // Counter-rotate: draw at +angle so bar compensates device tilt and stays with the horizon
+        val rad  = Math.toRadians(angle.toDouble())
         val cosA = cos(rad).toFloat()
         val sinA = sin(rad).toFloat()
 
