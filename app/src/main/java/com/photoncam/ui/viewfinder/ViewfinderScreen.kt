@@ -95,6 +95,7 @@ import com.photoncam.processing.DateImprintFont
 import com.photoncam.processing.DateImprintPosition
 import com.photoncam.processing.DateImprintSize
 import com.photoncam.processing.DateImprintStyle
+import com.photoncam.ui.filmCanisterStyle
 import com.photoncam.ui.filmselect.FilmSelectorSheet
 
 // ── Camera body palette ───────────────────────────────────────────────────────
@@ -841,15 +842,12 @@ private fun LensSelectorRow(
 
 @Composable
 private fun FilmCanisterWindow(film: FilmStock, modifier: Modifier = Modifier) {
-    val accent = film.accentColor
-    // Derive a slightly darker shade for cylinder shading edges
-    val accentDark = accent.copy(
-        red   = (accent.red   * 0.45f).coerceIn(0f, 1f),
-        green = (accent.green * 0.45f).coerceIn(0f, 1f),
-        blue  = (accent.blue  * 0.45f).coerceIn(0f, 1f),
-        alpha = 1f,
-    )
-    Canvas(modifier = modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))) {
+    val style = filmCanisterStyle(film)
+    val body  = style.bodyColor
+    val cap   = style.capColor
+    val stripe = style.stripeColor
+
+    Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
 
@@ -859,76 +857,54 @@ private fun FilmCanisterWindow(film: FilmStock, modifier: Modifier = Modifier) {
         }
         clipPath(ovalPath) {
 
-            // 1. Main canister body color — fills the whole oval
-            drawRect(color = accent)
-
-            // 2. Cylindrical shading: dark left and right edges (wrap-around effect)
-            val gradW = w * 0.30f
+            // 1. Cap band at top (~16% of height) — same cap color as in selector
+            val capH = h * 0.16f
+            drawRect(color = cap, topLeft = Offset(0f, 0f), size = Size(w, capH))
+            // Cap specular highlight
             drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(accentDark, Color.Transparent),
-                    startX = 0f,
-                    endX = gradW,
-                ),
-                topLeft = Offset(0f, 0f),
-                size = Size(gradW, h),
-            )
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color.Transparent, accentDark),
-                    startX = w - gradW,
-                    endX = w,
-                ),
-                topLeft = Offset(w - gradW, 0f),
-                size = Size(gradW, h),
+                color = Color.White.copy(alpha = 0.10f),
+                topLeft = Offset(w * 0.08f, capH * 0.15f),
+                size = Size(w * 0.84f, capH * 0.38f),
             )
 
-            // 3. Film strip sprocket edge — dark strip on the left ~18% wide
-            val stripW = w * 0.18f
+            // 2. Body fill (from cap bottom to oval bottom)
+            drawRect(color = body, topLeft = Offset(0f, capH), size = Size(w, h - capH))
+
+            // 3. Cylindrical shading — left highlight, right shadow (matches FilmCanisterIcon)
             drawRect(
-                color = Color(0xFF111111),
-                topLeft = Offset(0f, 0f),
-                size = Size(stripW, h),
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.32f), Color.Transparent),
+                    startX = 0f, endX = w * 0.38f,
+                ),
+                topLeft = Offset(0f, capH), size = Size(w * 0.38f, h - capH),
             )
-            // Sprocket holes (2 holes, small rounded rects)
-            val holeW = stripW * 0.55f
-            val holeH = h * 0.18f
-            val holeX = (stripW - holeW) / 2f
-            for (yFrac in listOf(0.25f, 0.65f)) {
-                drawRoundRect(
-                    color = Color(0xFF2E2E2E),
-                    topLeft = Offset(holeX, h * yFrac - holeH / 2f),
-                    size = Size(holeW, holeH),
-                    cornerRadius = CornerRadius(holeW * 0.3f),
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.38f)),
+                    startX = w * 0.55f, endX = w,
+                ),
+                topLeft = Offset(w * 0.55f, capH), size = Size(w * 0.45f, h - capH),
+            )
+
+            // 4. Accent stripe centered in the body (like label band)
+            if (stripe != null) {
+                val stripeY = capH + (h - capH) * 0.44f
+                drawRect(
+                    color = stripe.copy(alpha = 0.85f),
+                    topLeft = Offset(0f, stripeY),
+                    size = Size(w, 2.5.dp.toPx()),
                 )
             }
-            // Separation line between strip and body
-            drawLine(
-                color = Color.Black.copy(alpha = 0.55f),
-                start = Offset(stripW, 0f),
-                end   = Offset(stripW, h),
-                strokeWidth = 0.8.dp.toPx(),
-            )
 
-            // 4. Center highlight — subtle bright band to sell the cylinder curve
+            // 5. Cap-body seam
             drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color.White.copy(alpha = 0.18f),
-                        Color.White.copy(alpha = 0.25f),
-                        Color.White.copy(alpha = 0.18f),
-                        Color.Transparent,
-                    ),
-                    startX = w * 0.38f,
-                    endX   = w * 0.72f,
-                ),
-                topLeft = Offset(0f, 0f),
-                size = Size(w, h),
+                color = Color.Black.copy(alpha = 0.30f),
+                topLeft = Offset(0f, capH - 0.5.dp.toPx()),
+                size = Size(w, 1.dp.toPx()),
             )
         }
 
-        // ── Oval porthole bezel (drawn outside clip so it overlays the edge) ──
+        // ── Oval porthole bezel ───────────────────────────────────────────────
         drawOval(
             color = Color(0xFF888888),
             topLeft = Offset(0f, 0f),
@@ -997,8 +973,8 @@ private fun FilmButton(
             FilmCanisterWindow(
                 film = film,
                 modifier = Modifier
-                    .width(30.dp)
-                    .height(22.dp),
+                    .width(42.dp)
+                    .height(30.dp),
             )
         }
     }
