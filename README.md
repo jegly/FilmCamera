@@ -163,5 +163,9 @@ Requires Android SDK, min API 26 (Android 8.0).
 
 ## Third-party credits
 
+- **Hald CLUT film simulations** — 3D colour lookup tables used for per-film colour grading.
+  © cedeber — [github.com/cedeber/hald-clut](https://github.com/cedeber/hald-clut) — GNU General Public License v3.0.
+  See [`LICENSES/GPL-3.0.txt`](LICENSES/GPL-3.0.txt) for the full license text.
+
 - **DSEG7 font** — 7-segment LED display typeface used for the date imprint LED style.
   © 2020 Keshikan — [github.com/keshikan/DSEG](https://github.com/keshikan/DSEG) — SIL Open Font License 1.1.
