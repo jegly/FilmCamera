@@ -319,6 +319,7 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                         viewableUri = viewableUri,
                         onFilmTap = viewModel::toggleFilmSelector,
                         onDateMenuTap = viewModel::toggleDateImprintMenu,
+                        onSettingsTap = viewModel::toggleSettingsMenu,
                         onToggleLightLeak = viewModel::toggleLightLeak,
                         onView = onView,
                         onShare = onShare,
@@ -353,6 +354,19 @@ fun ViewfinderScreen(viewModel: ViewfinderViewModel = hiltViewModel()) {
                 onSelect = viewModel::selectFilm,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onDismiss = viewModel::toggleFilmSelector,
+            )
+        }
+
+        AnimatedVisibility(
+            visible = uiState.showSettingsMenu,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it }),
+        ) {
+            SettingsMenuSheet(
+                uiState = uiState,
+                onSetFocusDuration = viewModel::setFocusDuration,
+                onSave = viewModel::saveAndCloseSettings,
             )
         }
 
@@ -766,6 +780,7 @@ private fun ActionButtonsGrid(
     viewableUri: android.net.Uri?,
     onFilmTap: () -> Unit,
     onDateMenuTap: () -> Unit,
+    onSettingsTap: () -> Unit,
     onToggleLightLeak: () -> Unit,
     onView: () -> Unit,
     onShare: () -> Unit,
@@ -788,16 +803,25 @@ private fun ActionButtonsGrid(
                 onClick = onToggleLightLeak,
             )
         }
-        // Row 2: DATE stamp menu button
+        // Row 2: DATE stamp menu + SETTINGS
         val dateSummary = if (!uiState.dateImprintEnabled) "DATE STAMP\nOFF"
         else "DATE  ${uiState.dateImprintStyle.formatPreview()}\n${uiState.dateImprintColor.label}  ${uiState.dateImprintPosition.label}"
-        CamButton(
-            label = dateSummary,
-            accentColor = uiState.selectedFilm.accentColor,
-            highlighted = uiState.dateImprintEnabled,
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onDateMenuTap,
-        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            CamButton(
+                label = dateSummary,
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = uiState.dateImprintEnabled,
+                modifier = Modifier.weight(1f),
+                onClick = onDateMenuTap,
+            )
+            CamButton(
+                label = "SETT\nINGS",
+                accentColor = uiState.selectedFilm.accentColor,
+                highlighted = false,
+                modifier = Modifier.weight(0.55f),
+                onClick = onSettingsTap,
+            )
+        }
         // Row 3: VIEW + SHARE
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             CamButton(
@@ -1350,6 +1374,150 @@ private fun DateChip(
             fontSize = 9.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
+    }
+}
+
+// ── Settings Menu Sheet ───────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsMenuSheet(
+    uiState: ViewfinderUiState,
+    onSetFocusDuration: (Int) -> Unit,
+    onSave: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF141414))
+            .windowInsetsPadding(WindowInsets.navigationBars),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "SETTINGS",
+                    color = Color(0xFF888888),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    letterSpacing = 3.sp,
+                )
+                // Save button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(uiState.selectedFilm.accentColor.copy(alpha = 0.15f))
+                        .border(1.dp, uiState.selectedFilm.accentColor.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .clickable(onClick = onSave)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = "SAVE",
+                        color = uiState.selectedFilm.accentColor,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                    )
+                }
+            }
+
+            HorizontalDivider(color = Color(0xFF242424))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // ── Focus duration ────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "FOCUS DURATION",
+                            color = Color(0xFF555555),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp,
+                            letterSpacing = 2.sp,
+                        )
+                        Text(
+                            text = "${uiState.focusDurationSeconds}s",
+                            color = uiState.selectedFilm.accentColor,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Slider(
+                        value = uiState.focusDurationSeconds.toFloat(),
+                        onValueChange = { onSetFocusDuration(it.toInt()) },
+                        valueRange = 1f..30f,
+                        steps = 28,
+                        modifier = Modifier.fillMaxWidth().height(24.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = uiState.selectedFilm.accentColor,
+                            activeTrackColor = uiState.selectedFilm.accentColor.copy(alpha = 0.8f),
+                            inactiveTrackColor = Color(0xFF333333),
+                        ),
+                    )
+                }
+
+                HorizontalDivider(color = Color(0xFF222222))
+
+                // ── About ─────────────────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "ABOUT",
+                        color = Color(0xFF555555),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 2.sp,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "VERSION",
+                            color = Color(0xFF444444),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                        )
+                        Text(
+                            text = com.photoncam.BuildConfig.VERSION_NAME,
+                            color = Color(0xFF666666),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "BUILD DATE",
+                            color = Color(0xFF444444),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                        )
+                        Text(
+                            text = com.photoncam.BuildConfig.BUILD_DATE,
+                            color = Color(0xFF666666),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -72,6 +72,8 @@ data class ViewfinderUiState(
     val evStep: Double = 1.0,
     val mainZoomRatio: Float = 1.0f,
     val focusPoint: FocusPoint? = null,
+    val showSettingsMenu: Boolean = false,
+    val focusDurationSeconds: Int = 5,
 )
 
 @HiltViewModel
@@ -117,6 +119,7 @@ class ViewfinderViewModel @Inject constructor(
                     flashEnabled = saved.flashEnabled,
                     evIndex = saved.evIndex,
                     mainZoomRatio = saved.mainZoomRatio,
+                    focusDurationSeconds = saved.focusDurationSeconds,
                 )
             }
             // Re-apply saved zoom in case bindCamera() already ran before settings loaded
@@ -188,6 +191,7 @@ class ViewfinderViewModel @Inject constructor(
                     favoriteFilmIds = state.favoriteFilmIds,
                     flashEnabled = state.flashEnabled,
                     mainZoomRatio = state.mainZoomRatio,
+                    focusDurationSeconds = state.focusDurationSeconds,
                 )
             )
         }
@@ -462,17 +466,30 @@ class ViewfinderViewModel @Inject constructor(
 
     fun tapToFocus(x: Float, y: Float, factory: MeteringPointFactory) {
         val meteringPoint = factory.createPoint(x, y)
+        val duration = _uiState.value.focusDurationSeconds
         focusJob?.cancel()
         _uiState.update { it.copy(focusPoint = FocusPoint(x, y, focused = false)) }
         focusJob = viewModelScope.launch {
-            cameraManager.tapToFocus(meteringPoint)
+            cameraManager.tapToFocus(meteringPoint, duration)
                 .onSuccess {
                     _uiState.update { s -> s.copy(focusPoint = s.focusPoint?.copy(focused = true)) }
                 }
-                // Success or failure: hold indicator then clear
-            delay(5000)
+            delay(duration * 1000L)
             _uiState.update { it.copy(focusPoint = null) }
         }
+    }
+
+    fun toggleSettingsMenu() {
+        _uiState.update { it.copy(showSettingsMenu = !it.showSettingsMenu) }
+    }
+
+    fun setFocusDuration(seconds: Int) {
+        _uiState.update { it.copy(focusDurationSeconds = seconds.coerceIn(1, 30)) }
+    }
+
+    fun saveAndCloseSettings() {
+        persistSettings()
+        _uiState.update { it.copy(showSettingsMenu = false) }
     }
 
     fun clearLastCapture() {

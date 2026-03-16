@@ -368,11 +368,11 @@ class CameraManager @Inject constructor(
 
     // ── Tap-to-focus ──────────────────────────────────────────────────────────
 
-    suspend fun tapToFocus(meteringPoint: MeteringPoint): Result<Unit> {
+    suspend fun tapToFocus(meteringPoint: MeteringPoint, durationSeconds: Int): Result<Unit> {
         val result = runCatching {
             val ctrl = camera?.cameraControl ?: error("Camera not bound")
             val action = FocusMeteringAction.Builder(meteringPoint)
-                .setAutoCancelDuration(5, TimeUnit.SECONDS)
+                .setAutoCancelDuration(durationSeconds.toLong(), TimeUnit.SECONDS)
                 .build()
             suspendCancellableCoroutine { cont ->
                 val future = ctrl.startFocusAndMetering(action)

@@ -40,6 +40,7 @@ data class AppSettings(
     val favoriteFilmIds: Set<String> = emptySet(),
     val flashEnabled: Boolean = false,
     val mainZoomRatio: Float = 1.0f,
+    val focusDurationSeconds: Int = 5,
 )
 
 @Singleton
@@ -65,6 +66,7 @@ class SettingsRepository @Inject constructor(
         val favoriteFilmIds = stringPreferencesKey("favorite_film_ids")
         val flashEnabled = booleanPreferencesKey("flash_enabled")
         val mainZoomRatio = floatPreferencesKey("main_zoom_ratio")
+        val focusDurationSeconds = intPreferencesKey("focus_duration_seconds")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -98,6 +100,7 @@ class SettingsRepository @Inject constructor(
                 ?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet(),
             flashEnabled = prefs[Keys.flashEnabled] ?: false,
             mainZoomRatio = prefs[Keys.mainZoomRatio] ?: 1.0f,
+            focusDurationSeconds = prefs[Keys.focusDurationSeconds] ?: 5,
         )
     }
 
@@ -125,6 +128,7 @@ class SettingsRepository @Inject constructor(
             prefs[Keys.favoriteFilmIds] = settings.favoriteFilmIds.joinToString(",")
             prefs[Keys.flashEnabled] = settings.flashEnabled
             prefs[Keys.mainZoomRatio] = settings.mainZoomRatio
+            prefs[Keys.focusDurationSeconds] = settings.focusDurationSeconds
         }
     }
 }
