@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Monochrome Film Camera Logo (White/Gray on transparent/background) -->
+    
+    <!-- Camera Body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,34h60c2.2,0 4,1.8 4,4v36c0,2.2 -1.8,4 -4,4h-60c-2.2,0 -4,-1.8 -4,-4v-36C20,35.8 21.8,34 24,34z" />
+        
+    <!-- Top Dial / Pentaprism -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,34h20l-4,-6h-12z" />
+        
+    <!-- Shutter Button -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,30h8v4h-8z" />
+        
+    <!-- Lens Outer Ring -->
+    <path
+        android:fillColor="#E0E0E0"
+        android:pathData="M54,40m-18,0a18,18 0 1,1 36,0a18,18 0 1,1 -36,0" />
+        
+    <!-- Lens Inner Ring -->
+    <path
+        android:fillColor="#BDBDBD"
+        android:pathData="M54,40m-14,0a14,14 0 1,1 28,0a14,14 0 1,1 -28,0" />
+        
+    <!-- Lens Center / Aperture -->
+    <path
+        android:fillColor="#212121"
+        android:pathData="M54,40m-8,0a8,8 0 1,1 16,0a8,8 0 1,1 -16,0" />
+
+    <!-- Viewfinder Window -->
+    <path
+        android:fillColor="#212121"
+        android:pathData="M74,38h6v6h-6z" />
+
+</vector>

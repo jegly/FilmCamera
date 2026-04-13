@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Never back up raw captures or processed cache to Google Drive -->
+        <exclude domain="cache" />
+        <exclude domain="sharedpref" path="filmcamera_settings.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="cache" />
+    </device-transfer>
+</data-extraction-rules>

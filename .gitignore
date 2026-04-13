@@ -1,0 +1,24 @@
+# Android
+*.iml
+.gradle/
+.idea/
+.kotlin/
+build/
+app/build/
+local.properties
+captures/
+.DS_Store
+*.log
+*.hprof
+*.zip
+*.keystore
+*.jks
+
+# OS files
+Thumbs.db
+*~
+*.swp
+
+# Build outputs
+*.apk
+*.aab
