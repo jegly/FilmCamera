@@ -1,10 +1,7 @@
-<p align="center">
-    <img src="screenshots/filmcamera_hero.png" alt="FilmCamera"/>
-  </p>
 
 
 
-**A private, offline film camera for Android — real analog film simulation with zero network access**
+**Film Camera simulator**
 
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.0-cba6f7.svg?logo=kotlin&logoColor=cdd6f4&labelColor=1e1e2e)](https://kotlinlang.org)
   [![Android](https://img.shields.io/badge/Android-8.0%2B-a6e3a1.svg?logo=android&logoColor=cdd6f4&labelColor=1e1e2e)](https://developer.android.com)
