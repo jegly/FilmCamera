@@ -18,29 +18,6 @@
 
 If this project helped you, please ⭐️ star it. **Also try [rss](https://github.com/jegly/rss)**, **[OfflineLLM](https://github.com/jegly/OfflineLLM)** and **[Box](https://github.com/jegly/Box)** — privacy-first, on-device Android apps built on the same philosophy.
 
----
-
-**📱 Screenshots**
-
-<table>
-  <tr>
-    <td><img src="screenshots/01_viewfinder.png" width="220"/></td>
-    <td><img src="screenshots/02_film_selector.png" width="220"/></td>
-    <td><img src="screenshots/03_gpu_preview.png" width="220"/></td>
-  </tr>
-  <tr>
-    <td><img src="screenshots/04_pro_controls.png" width="220"/></td>
-    <td><img src="screenshots/05_film_tuning.png" width="220"/></td>
-    <td><img src="screenshots/06_settings.png" width="220"/></td>
-  </tr>
-  <tr>
-    <td><img src="screenshots/07_long_exposure.png" width="220"/></td>
-    <td><img src="screenshots/08_custom_lut_import.png" width="220"/></td>
-    <td></td>
-  </tr>
-</table>
-
----
 
 ## Features
 
